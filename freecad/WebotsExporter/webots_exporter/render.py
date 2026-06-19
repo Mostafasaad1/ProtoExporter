@@ -30,10 +30,15 @@ class WbtRenderer:
         solid_text = self._render_solid(root_solid)
         return template.render(world_name=world_name, root_solid=solid_text)
 
-    def _render_solid(self, node: WbSolidNode) -> str:
+    def render_proto(self, proto_name: str, root_solid: WbSolidNode) -> str:
+        template = self._env.get_template("proto.j2")
+        solid_text = self._render_solid(root_solid, is_root=True)
+        return template.render(proto_name=proto_name, root_solid=solid_text)
+
+    def _render_solid(self, node: WbSolidNode, is_root: bool = False) -> str:
         template = self._env.get_template("solid.proto.j2")
         rendered_joints = [self._render_joint(j) for j in node.child_joints]
-        return template.render(node=node, joints=rendered_joints)
+        return template.render(node=node, joints=rendered_joints, is_root=is_root)
 
     def _render_joint(self, joint: WbJointNode) -> str:
         tmpl_name = JOINT_TEMPLATE_MAP.get(joint.joint_type)

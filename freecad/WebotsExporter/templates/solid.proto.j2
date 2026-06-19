@@ -1,8 +1,14 @@
 {% import "macros.j2" as m %}
 Solid {
+  {% if is_root %}
+  name IS name
+  translation IS translation
+  rotation IS rotation
+  {% else %}
   name "{{ node.name }}"
   translation {{ m.vec3(node.translation) }}
   rotation {{ m.axis_angle(node.rotation) }}
+  {% endif %}
   children [
     {% for geo in node.geometries %}
     {{ m.shape_block(geo) }}

@@ -95,25 +95,31 @@ class WebotsExporter:
         self._export_visual_meshes_diag(root_solid, meshes_dir, parts, diag_lines)
         self._apply_collision_geometry(root_solid, parts, meshes_dir)
 
-        wbt_path = self.output_dir / f"{self.world_name}.wbt"
-        wbt_content = self.renderer.render_world(self.world_name, root_solid)
-        wbt_path.write_text(wbt_content, encoding="utf-8")
+        proto_path = self.output_dir / f"{self.world_name}.proto"
+        proto_content = self.renderer.render_proto(self.world_name, root_solid)
+        proto_path.write_text(proto_content, encoding="utf-8")
 
         diag_lines.append("")
-        diag_lines.append("-- Generated WBT --")
-        diag_lines.append(wbt_content)
+        diag_lines.append("-- Generated PROTO --")
+        diag_lines.append(proto_content)
 
         diag_path = self.output_dir / "export_diagnostic.txt"
         diag_path.write_text("\n".join(diag_lines), encoding="utf-8")
         if _FreeCAD is not None:
             _FreeCAD.Console.PrintMessage(f"[ProtoExporter] Diagnostic: {diag_path}\n")
 
-        return wbt_path
+        return proto_path
 
     def _export_visual_meshes_diag(
         self, node: "WbSolidNode", meshes_dir: Path, parts: list[Any], diag: list[str]
     ) -> None:
         """Like _export_visual_meshes but appends diagnostic info."""
+        try:
+            import FreeCAD
+            import Mesh
+        except ImportError:
+            FreeCAD = None
+            Mesh = None
         for joint in node.child_joints:
             if joint.child is not None:
                 self._export_visual_meshes_diag(joint.child, meshes_dir, parts, diag)
@@ -121,46 +127,60 @@ class WebotsExporter:
         for part in parts:
             p_name = getattr(part, "Label", "")
             if p_name == node.name:
-                shape = getattr(part, "Shape", None)
-                if shape is not None:
-                    # try to get vertex count from raw mesh or via MeshPart
-                    vertex_count = 0
-                    raw_mesh = getattr(shape, "Mesh", None)
-                    if raw_mesh is None:
-                        try:
-                            import MeshPart
-                            raw_mesh = MeshPart.meshFromShape(shape)
-                        except Exception:
-                            pass
-                    if raw_mesh is not None:
-                        pts = getattr(raw_mesh, "Points", [])
-                        vertex_count = len(pts)
+                obj_path = meshes_dir / f"{node.name}.obj"
+                try:
+                    if Mesh is not None:
+                        Mesh.export([part], str(obj_path))
+                        diag.append(f"  Node={node.name}: exported via Mesh.export successfully")
+                    else:
+                        diag.append(f"  Node={node.name}: Mesh is None (test mode)")
+                except Exception as e:
+                    diag.append(f"  Node={node.name}: Mesh.export failed: {e}")
 
-                    diag.append(
-                        f"  Node={node.name}: matched part {part.Name} "
-                        f"(Label={part.Label}) Shape={'yes'} vertices={vertex_count}"
-                    )
-                    obj_path = meshes_dir / f"{node.name}.obj"
-                    existing = node.geometries[0] if node.geometries else None
-                    color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
-                    from .mesh_export import export_obj
-                    export_obj(shape, obj_path, color=color)
-                    if not node.geometries:
-                        from .datamodel import WbShapeGeometry, WbAppearance
-                        node.geometries.append(
-                            WbShapeGeometry(
-                                obj_relpath=f"meshes/{node.name}.obj",
-                                appearance=WbAppearance(diffuse_color=color),
-                            )
+                existing = node.geometries[0] if node.geometries else None
+                color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
+                if not node.geometries:
+                    from .datamodel import WbShapeGeometry, WbAppearance
+                    node.geometries.append(
+                        WbShapeGeometry(
+                            obj_relpath=f"meshes/{node.name}.obj",
+                            appearance=WbAppearance(diffuse_color=color),
                         )
-                    obj_size = obj_path.stat().st_size if obj_path.exists() else 0
-                    diag.append(f"    -> {obj_path.name}: {obj_size} bytes")
-                else:
-                    diag.append(f"  Node={node.name}: matched part {part.Name} but Shape=None")
+                    )
+                obj_size = obj_path.stat().st_size if obj_path.exists() else 0
+                diag.append(f"    -> {obj_path.name}: {obj_size} bytes")
                 break
         else:
             diag.append(f"  Node={node.name}: NO matching part found in parts list")
 
+    def _export_visual_meshes(
+        self, node: "WbSolidNode", meshes_dir: Path, parts: list[Any]
+    ) -> None:
+        import Mesh
+        for joint in node.child_joints:
+            if joint.child is not None:
+                self._export_visual_meshes(joint.child, meshes_dir, parts)
+
+        for part in parts:
+            p_name = getattr(part, "Label", "")
+            if p_name == node.name:
+                obj_path = meshes_dir / f"{node.name}.obj"
+                try:
+                    Mesh.export([part], str(obj_path))
+                except Exception:
+                    pass
+
+                existing = node.geometries[0] if node.geometries else None
+                color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
+                if not node.geometries:
+                    from .datamodel import WbShapeGeometry, WbAppearance
+                    node.geometries.append(
+                        WbShapeGeometry(
+                            obj_relpath=f"meshes/{node.name}.obj",
+                            appearance=WbAppearance(diffuse_color=color),
+                        )
+                    )
+                break
     def _collect_parts(self, fc_document: Any) -> list[Any]:
         assembly = None
         for obj in fc_document.Objects:
@@ -337,16 +357,22 @@ class WebotsExporter:
     def _apply_collision_geometry(
         self, node: WbSolidNode, parts: list[Any], meshes_dir: Path
     ) -> None:
+        try:
+            import FreeCAD
+            import Mesh
+        except ImportError:
+            FreeCAD = None
+            Mesh = None
         for part in parts:
             p_name = getattr(part, "Label", "")
             if p_name == node.name:
                 shape = getattr(part, "Shape", None)
                 if shape is not None:
-                    mesh = getattr(shape, "Mesh", None)
-                    if mesh is not None:
-                        pts = getattr(mesh, "Points", [])
-                        if pts:
-                            vertices = [(p.x, p.y, p.z) for p in pts]
+                    # Get vertices via TopoShape.tessellate
+                    try:
+                        vertices_list, _ = shape.tessellate(0.1)
+                        if vertices_list:
+                            vertices = [(v.x, v.y, v.z) for v in vertices_list]
                             node.bounding_object = fit_bounding_object(
                                 vertices, prefer_cylinder=True
                             )
@@ -354,11 +380,15 @@ class WebotsExporter:
                                 "Decimated Mesh Only", "auto"
                             ):
                                 coll_path = meshes_dir / f"{node.name}_collision.stl"
-                                export_collision_stl(
-                                    shape, coll_path, decimate=True
-                                )
-                                if node.bounding_object.kind == BoundingKind.MESH:
-                                    node.bounding_object.mesh_relpath = str(coll_path)
+                                try:
+                                    if Mesh is not None:
+                                        Mesh.export([part], str(coll_path))
+                                    if node.bounding_object.kind == BoundingKind.MESH:
+                                        node.bounding_object.mesh_relpath = str(coll_path)
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
                 break
         for joint in node.child_joints:
             if joint.child is not None:

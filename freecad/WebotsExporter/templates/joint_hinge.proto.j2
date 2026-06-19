@@ -2,7 +2,7 @@
 HingeJoint {
   jointParameters HingeJointParameters {
     anchor {{ m.vec3(joint.anchor) }}
-    axis {{ m.axis_angle(joint.axis) }}
+    axis {{ m.vec3(joint.axis) }}
     minStop {{ joint.min_stop }}
     maxStop {{ joint.max_stop }}
   }
