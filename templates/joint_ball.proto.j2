@@ -1,0 +1,7 @@
+{% import "macros.j2" as m %}
+BallJoint {
+  jointParameters BallJointParameters {
+    anchor {{ m.vec3(joint.anchor) }}
+  }
+  endPoint {{ child_solid }}
+}

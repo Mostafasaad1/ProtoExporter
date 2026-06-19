@@ -1,0 +1,9 @@
+{% import "macros.j2" as m %}
+SliderJoint {
+  jointParameters SliderJointParameters {
+    axis {{ m.axis_angle(joint.axis) }}
+    minStop {{ joint.min_stop }}
+    maxStop {{ joint.max_stop }}
+  }
+  endPoint {{ child_solid }}
+}

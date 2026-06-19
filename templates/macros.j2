@@ -1,0 +1,41 @@
+{% macro vec3(v) %}{{ v.x }} {{ v.y }} {{ v.z }}{% endmacro %}
+{% macro axis_angle(a) %}{{ a.x }} {{ a.y }} {{ a.z }} {{ a.angle }}{% endmacro %}
+
+{% macro physics_block(p) %}
+Physics {
+  density {{ p.density }}
+  mass {{ p.mass }}
+  centerOfMass [ {{ vec3(p.center_of_mass) }} ]
+}
+{% endmacro %}
+
+{% macro bounding_block(b) %}
+{% if b.kind.value == "box" %}
+boundingObject Box {
+  size {{ b.size.x }} {{ b.size.y }} {{ b.size.z }}
+}
+{% elif b.kind.value == "cylinder" %}
+boundingObject Cylinder {
+  radius {{ b.radius }}
+  height {{ b.height }}
+}
+{% elif b.kind.value == "mesh" %}
+boundingObject Mesh {
+  url "{{ b.mesh_relpath }}"
+}
+{% endif %}
+{% endmacro %}
+
+{% macro shape_block(geo) %}
+Shape {
+  appearance Appearance {
+    material Material {
+      diffuseColor {{ geo.appearance.diffuse_color[0] }} {{ geo.appearance.diffuse_color[1] }} {{ geo.appearance.diffuse_color[2] }}
+      transparency {{ geo.appearance.transparency }}
+    }
+  }
+  geometry Mesh {
+    url "{{ geo.obj_relpath }}"
+  }
+}
+{% endmacro %}

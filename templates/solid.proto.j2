@@ -1,0 +1,20 @@
+{% import "macros.j2" as m %}
+Solid {
+  name "{{ node.name }}"
+  translation {{ m.vec3(node.translation) }}
+  rotation {{ m.axis_angle(node.rotation) }}
+  children [
+    {% for geo in node.geometries %}
+    {{ m.shape_block(geo) }}
+    {% endfor %}
+    {% for joint in joints %}
+    {{ joint }}
+    {% endfor %}
+  ]
+  {% if node.bounding_object %}
+  {{ m.bounding_block(node.bounding_object) }}
+  {% endif %}
+  {% if node.physics %}
+  {{ m.physics_block(node.physics) }}
+  {% endif %}
+}
