@@ -12,6 +12,13 @@ def export_obj(
     faces: list[list[int]] = []
 
     mesh = getattr(fc_shape, "Mesh", None)
+    if mesh is None:
+        try:
+            import MeshPart
+            mesh = MeshPart.meshFromShape(fc_shape)
+        except Exception:
+            pass
+
     if mesh is not None:
         pts = getattr(mesh, "Points", [])
         for p in pts:
@@ -50,6 +57,13 @@ def export_collision_stl(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     mesh = getattr(fc_shape, "Mesh", None)
     if mesh is None:
+        try:
+            import MeshPart
+            mesh = MeshPart.meshFromShape(fc_shape)
+        except Exception:
+            pass
+
+    if mesh is None:
         output_path.write_text("", encoding="utf-8")
         return
 
@@ -61,7 +75,7 @@ def export_collision_stl(
             target = max(1, int(mesh.countPoints * 0.1))
             stl_mesh.decimate(target)
         stl_mesh.write(str(output_path))
-    except ImportError:
+    except Exception:
         _write_fallback_stl(mesh, output_path)
 
 

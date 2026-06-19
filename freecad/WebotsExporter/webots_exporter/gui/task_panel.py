@@ -69,13 +69,40 @@ class ExportTaskPanel:
                 self.form, "Warning", "Please select an output directory."
             )
             return False
-        self.options = ExportOptions(
-            output_dir=directory, collision_strategy=strategy
+            
+        import FreeCAD
+        from ..exporter import WebotsExporter
+        from pathlib import Path
+        
+        output_dir = Path(directory)
+        exporter = WebotsExporter(
+            output_dir=output_dir,
+            collision_strategy=strategy,
         )
-        return True
+        try:
+            doc = FreeCAD.ActiveDocument
+            result = exporter.run(doc)
+            QtWidgets.QMessageBox.information(
+                self.form,
+                "Export Complete",
+                f"Assembly exported to:\n{result}",
+            )
+            return True
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(
+                self.form,
+                "Export Failed",
+                f"An error occurred during export:\n{e}",
+            )
+            return False
 
     def reject(self) -> None:
-        pass
+        import FreeCADGui
+        FreeCADGui.Control.closeDialog()
 
-    def get_standard_buttons(self) -> int:
-        return int(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+    def getStandardButtons(self) -> int:
+        ok = QtWidgets.QDialogButtonBox.Ok
+        cancel = QtWidgets.QDialogButtonBox.Cancel
+        ok_val = ok.value if hasattr(ok, "value") else int(ok)
+        cancel_val = cancel.value if hasattr(cancel, "value") else int(cancel)
+        return ok_val | cancel_val

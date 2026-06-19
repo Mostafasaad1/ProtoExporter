@@ -29,27 +29,6 @@ class ExportToWebotsCommand:
     def Activated(self) -> None:
         panel = ExportTaskPanel()
         FreeCADGui.Control.showDialog(panel)
-        if panel.accept():
-            opts = panel.options
-            output_dir = Path(opts.output_dir)
-            exporter = WebotsExporter(
-                output_dir=output_dir,
-                collision_strategy=opts.collision_strategy,
-            )
-            try:
-                doc = FreeCAD.ActiveDocument
-                result = exporter.run(doc)
-                QtWidgets.QMessageBox.information(
-                    None,
-                    "Export Complete",
-                    f"Assembly exported to:\n{result}",
-                )
-            except Exception as e:
-                QtWidgets.QMessageBox.critical(
-                    None,
-                    "Export Failed",
-                    f"An error occurred during export:\n{e}",
-                )
 
 
 FreeCADGui.addCommand("ExportToWebots", ExportToWebotsCommand())

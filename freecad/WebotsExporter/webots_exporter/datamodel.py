@@ -11,6 +11,7 @@ class JointType(Enum):
     HINGE = "Hinge"
     SLIDER = "Slider"
     BALL = "Ball"
+    FIXED = "Fixed"
 
 
 class BoundingKind(Enum):

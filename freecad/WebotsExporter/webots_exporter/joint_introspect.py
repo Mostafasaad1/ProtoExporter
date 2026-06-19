@@ -9,15 +9,24 @@ FREECAD_TO_WEBOTS_JOINT = {
     "Ball": JointType.BALL,
     "Cylindrical": JointType.HINGE,
     "Screw": JointType.SLIDER,
+    "Fixed": JointType.FIXED,
 }
 
 
 def dump_joint_properties(fc_joint: Any) -> dict[str, Any]:
     name = getattr(fc_joint, "Label", "")
+    
     fc_type = getattr(fc_joint, "Type", "")
+    if not fc_type and hasattr(fc_joint, "JointType"):
+        fc_type = fc_joint.JointType
+    if not fc_type and hasattr(fc_joint, "TypeId"):
+        type_id = fc_joint.TypeId
+        if type_id.startswith("Assembly::Joint"):
+            fc_type = type_id[len("Assembly::Joint"):]
+            
     wb_type = FREECAD_TO_WEBOTS_JOINT.get(fc_type)
     if wb_type is None:
-        raise JointParsingError(f"Unsupported joint type: {fc_type}")
+        raise JointParsingError(f"Unsupported joint type: {fc_type or type(fc_joint)}")
 
     origin = getattr(fc_joint, "Placement", None)
     anchor = WbVec3()
