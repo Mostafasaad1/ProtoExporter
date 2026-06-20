@@ -8,7 +8,7 @@ except ImportError:
 from pathlib import Path
 
 from .exporter import WebotsExporter
-from .gui.task_panel import ExportTaskPanel
+from .gui.task_panel import ExportTaskPanel, MotorSensorMappingTaskPanel
 
 
 class ExportToWebotsCommand:
@@ -31,4 +31,26 @@ class ExportToWebotsCommand:
         FreeCADGui.Control.showDialog(panel)
 
 
+class MotorSensorMappingCommand:
+    def GetResources(self) -> dict[str, str]:
+        icon_path = os.path.join(os.path.dirname(__file__), "gui", "resources", "icon.svg")
+        return {
+            "Pixmap": icon_path,
+            "MenuText": "Motor & Sensor Mapping...",
+            "ToolTip": "Configure actuation and sensing for assembly joints",
+        }
+
+    def IsActive(self) -> bool:
+        doc = FreeCAD.ActiveDocument
+        if doc is None:
+            return False
+        return True
+
+    def Activated(self) -> None:
+        panel = MotorSensorMappingTaskPanel()
+        FreeCADGui.Control.showDialog(panel)
+
+
 FreeCADGui.addCommand("ExportToWebots", ExportToWebotsCommand())
+FreeCADGui.addCommand("MotorSensorMapping", MotorSensorMappingCommand())
+

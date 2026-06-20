@@ -7,9 +7,16 @@ HingeJoint {
     maxStop {{ joint.max_stop_rot }}
   }
   device [
+    {% if joint.actuated %}
     RotationalMotor {
       name "{{ joint.name }}_rot_motor"
     }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_rot_sensor"
+    }
+    {% endif %}
   ]
   endPoint Solid {
     name "{{ joint.name }}_dummy"
@@ -27,9 +34,16 @@ HingeJoint {
           maxStop {{ joint.max_stop_trans }}
         }
         device [
+          {% if joint.actuated %}
           LinearMotor {
             name "{{ joint.name }}_trans_motor"
           }
+          {% endif %}
+          {% if joint.sensed %}
+          PositionSensor {
+            name "{{ joint.name }}_trans_sensor"
+          }
+          {% endif %}
         ]
         endPoint {{ child_solid }}
       }

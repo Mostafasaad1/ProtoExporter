@@ -8,9 +8,9 @@ class WebotsExporterWorkbench(FreeCADGui.Workbench):
     Icon = os.path.join(os.path.dirname(__file__), "webots_exporter", "gui", "resources", "icon.svg")
 
     def Initialize(self) -> None:
-        from .webots_exporter.commands import ExportToWebotsCommand
-        self.appendToolbar("Webots Export", ["ExportToWebots"])
-        self.appendMenu("Webots Export", ["ExportToWebots"])
+        from .webots_exporter.commands import ExportToWebotsCommand, MotorSensorMappingCommand
+        self.appendToolbar("Webots Export", ["ExportToWebots", "MotorSensorMapping"])
+        self.appendMenu("Webots Export", ["ExportToWebots", "MotorSensorMapping"])
 
     def Activated(self) -> None:
         pass

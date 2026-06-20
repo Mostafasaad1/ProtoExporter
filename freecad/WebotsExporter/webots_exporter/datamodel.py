@@ -88,6 +88,9 @@ class WbJointNode:
     min_stop_trans: float = 0.0
     max_stop_trans: float = 0.0
     child: Optional[WbSolidNode] = None
+    actuated: bool = False
+    sensed: bool = False
+
 
 
 @dataclass

@@ -473,6 +473,8 @@ class WebotsExporter:
                 max_stop_rot=props.get("max_stop_rot", 0.0),
                 min_stop_trans=props.get("min_stop_trans", 0.0),
                 max_stop_trans=props.get("max_stop_trans", 0.0),
+                actuated=props.get("actuated", False),
+                sensed=props.get("sensed", False),
             )
 
     def _apply_physics(self, node: WbSolidNode, parts: list[Any]) -> None:

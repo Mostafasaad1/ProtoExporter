@@ -47,6 +47,9 @@ class KinematicTreeBuilder:
                     min_stop = min_stop_trans
                     max_stop = max_stop_trans
 
+                actuated = props.get("actuated", False)
+                sensed = props.get("sensed", False)
+
                 child_solid = WbSolidNode(name=neighbor)
                 joint = WbJointNode(
                     joint_type=joint_type,
@@ -60,6 +63,8 @@ class KinematicTreeBuilder:
                     min_stop_trans=min_stop_trans,
                     max_stop_trans=max_stop_trans,
                     child=child_solid,
+                    actuated=actuated,
+                    sensed=sensed,
                 )
                 parent_solid.child_joints.append(joint)
                 queue.append((neighbor, child_solid))

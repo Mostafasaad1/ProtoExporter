@@ -4,19 +4,40 @@ BallJoint {
     anchor {{ m.vec3(joint.anchor) }}
   }
   device [
+    {% if joint.actuated %}
     RotationalMotor {
       name "{{ joint.name }}_motor"
     }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_sensor"
+    }
+    {% endif %}
   ]
   device2 [
+    {% if joint.actuated %}
     RotationalMotor {
       name "{{ joint.name }}_motor2"
     }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_sensor2"
+    }
+    {% endif %}
   ]
   device3 [
+    {% if joint.actuated %}
     RotationalMotor {
       name "{{ joint.name }}_motor3"
     }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_sensor3"
+    }
+    {% endif %}
   ]
   endPoint {{ child_solid }}
 }

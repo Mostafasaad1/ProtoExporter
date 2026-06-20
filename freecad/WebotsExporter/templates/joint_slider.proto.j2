@@ -6,9 +6,16 @@ SliderJoint {
     maxStop {{ joint.max_stop }}
   }
   device [
+    {% if joint.actuated %}
     LinearMotor {
       name "{{ joint.name }}_motor"
     }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_sensor"
+    }
+    {% endif %}
   ]
   endPoint {{ child_solid }}
 }

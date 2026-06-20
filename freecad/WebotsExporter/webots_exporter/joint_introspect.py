@@ -129,6 +129,18 @@ def dump_joint_properties(fc_joint: Any) -> dict[str, Any]:
             if isinstance(raw_val, (int, float)):
                 max_stop_trans = raw_val / 1000.0
 
+    actuated = False
+    sensed = False
+    if hasattr(fc_joint, "WebotsActuated"):
+        actuated = bool(fc_joint.WebotsActuated)
+    elif hasattr(fc_joint, "Actuated"):
+        actuated = bool(fc_joint.Actuated)
+        
+    if hasattr(fc_joint, "WebotsSensed"):
+        sensed = bool(fc_joint.WebotsSensed)
+    elif hasattr(fc_joint, "Sensed"):
+        sensed = bool(fc_joint.Sensed)
+
     return {
         "name": name,
         "joint_type": wb_type,
@@ -138,4 +150,6 @@ def dump_joint_properties(fc_joint: Any) -> dict[str, Any]:
         "max_stop_rot": max_stop_rot,
         "min_stop_trans": min_stop_trans,
         "max_stop_trans": max_stop_trans,
+        "actuated": actuated,
+        "sensed": sensed,
     }

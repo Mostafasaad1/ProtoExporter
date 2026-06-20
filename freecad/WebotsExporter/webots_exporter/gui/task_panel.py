@@ -148,3 +148,136 @@ class ExportTaskPanel:
         ok_val = ok.value if hasattr(ok, "value") else int(ok)
         cancel_val = cancel.value if hasattr(cancel, "value") else int(cancel)
         return ok_val | cancel_val
+
+
+class MotorSensorMappingTaskPanel:
+    def __init__(self) -> None:
+        self.form = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(self.form)
+        
+        # Title/Instructions label
+        layout.addWidget(QtWidgets.QLabel("Select joints to configure motors & sensors:"))
+        
+        # Table of joints
+        self.table = QtWidgets.QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Joint", "Actuated", "Sensed"])
+        
+        # Adjust section resize modes
+        header = self.table.horizontalHeader()
+        if hasattr(header, "setSectionResizeMode"):
+            header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        else:
+            header.setResizeMode(0, QtWidgets.QHeaderView.Stretch)
+            
+        layout.addWidget(self.table)
+        
+        # Populate table
+        self._populate_joints()
+        
+    def _populate_joints(self) -> None:
+        import FreeCAD
+        doc = FreeCAD.ActiveDocument
+        if not doc:
+            return
+            
+        joints = []
+        for obj in doc.Objects:
+            if obj.TypeId == "Assembly::JointGroup":
+                continue
+            if hasattr(obj, "Reference1") or hasattr(obj, "JointType") or obj.TypeId.startswith("Assembly::Joint"):
+                joints.append(obj)
+                
+        self.table.setRowCount(len(joints))
+        self._joints = joints
+        
+        for i, joint in enumerate(joints):
+            # Joint Name/Label
+            item_name = QtWidgets.QTableWidgetItem(joint.Label or joint.Name)
+            item_name.setFlags(item_name.flags() & ~QtCore.Qt.ItemIsEditable)
+            self.table.setItem(i, 0, item_name)
+            
+            # Actuated checkbox widget
+            act_widget = QtWidgets.QWidget()
+            act_layout = QtWidgets.QHBoxLayout(act_widget)
+            act_layout.setContentsMargins(0, 0, 0, 0)
+            act_layout.setAlignment(QtCore.Qt.AlignCenter)
+            act_cb = QtWidgets.QCheckBox()
+            
+            # Read current property value if exists
+            val_act = False
+            if hasattr(joint, "WebotsActuated"):
+                val_act = bool(joint.WebotsActuated)
+            elif hasattr(joint, "Actuated"):
+                val_act = bool(joint.Actuated)
+            act_cb.setChecked(val_act)
+            
+            act_layout.addWidget(act_cb)
+            self.table.setCellWidget(i, 1, act_widget)
+            
+            # Sensed checkbox widget
+            sens_widget = QtWidgets.QWidget()
+            sens_layout = QtWidgets.QHBoxLayout(sens_widget)
+            sens_layout.setContentsMargins(0, 0, 0, 0)
+            sens_layout.setAlignment(QtCore.Qt.AlignCenter)
+            sens_cb = QtWidgets.QCheckBox()
+            
+            val_sens = False
+            if hasattr(joint, "WebotsSensed"):
+                val_sens = bool(joint.WebotsSensed)
+            elif hasattr(joint, "Sensed"):
+                val_sens = bool(joint.Sensed)
+            sens_cb.setChecked(val_sens)
+            
+            sens_layout.addWidget(sens_cb)
+            self.table.setCellWidget(i, 2, sens_widget)
+            
+    def accept(self) -> bool:
+        # Save properties to joints
+        for i, joint in enumerate(self._joints):
+            act_widget = self.table.cellWidget(i, 1)
+            sens_widget = self.table.cellWidget(i, 2)
+            
+            if act_widget and sens_widget:
+                act_cb = act_widget.layout().itemAt(0).widget()
+                sens_cb = sens_widget.layout().itemAt(0).widget()
+                
+                act_val = act_cb.isChecked()
+                sens_val = sens_cb.isChecked()
+                
+                # Check / inject properties
+                if not hasattr(joint, "WebotsActuated"):
+                    try:
+                        joint.addProperty("App::PropertyBool", "WebotsActuated", "Webots")
+                    except Exception:
+                        pass
+                if hasattr(joint, "WebotsActuated"):
+                    joint.WebotsActuated = act_val
+                elif hasattr(joint, "Actuated"):
+                    joint.Actuated = act_val
+                    
+                if not hasattr(joint, "WebotsSensed"):
+                    try:
+                        joint.addProperty("App::PropertyBool", "WebotsSensed", "Webots")
+                    except Exception:
+                        pass
+                if hasattr(joint, "WebotsSensed"):
+                    joint.WebotsSensed = sens_val
+                elif hasattr(joint, "Sensed"):
+                    joint.Sensed = sens_val
+                    
+        import FreeCADGui
+        FreeCADGui.Control.closeDialog()
+        return True
+        
+    def reject(self) -> None:
+        import FreeCADGui
+        FreeCADGui.Control.closeDialog()
+        
+    def getStandardButtons(self) -> int:
+        ok = QtWidgets.QDialogButtonBox.Ok
+        cancel = QtWidgets.QDialogButtonBox.Cancel
+        ok_val = ok.value if hasattr(ok, "value") else int(ok)
+        cancel_val = cancel.value if hasattr(cancel, "value") else int(cancel)
+        return ok_val | cancel_val
+
