@@ -190,6 +190,58 @@ class WebotsExporter:
         except Exception as e:
             diag.append(f"  Controller={controller_name}: generation failed: {e}")
 
+    def _resolve_appearance(self, part: Any, node: "WbSolidNode") -> tuple[tuple[float, float, float], float]:
+        existing = node.geometries[0] if node.geometries else None
+        color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
+        transparency = existing.appearance.transparency if existing else 0.0
+
+        try:
+            sc = None
+            if hasattr(part, "ViewObject") and part.ViewObject is not None:
+                sc = getattr(part.ViewObject, "ShapeColor", None)
+            if not sc and hasattr(part, "LinkedObject") and part.LinkedObject and hasattr(part.LinkedObject, "ViewObject") and part.LinkedObject.ViewObject:
+                sc = getattr(part.LinkedObject.ViewObject, "ShapeColor", None)
+            
+            if not sc:
+                material = getattr(part, "Material", None)
+                if not material and hasattr(part, "LinkedObject") and part.LinkedObject:
+                    material = getattr(part.LinkedObject, "Material", None)
+                if material is not None:
+                    for attr in ["Color", "color", "ShapeColor", "diffuseColor"]:
+                        if hasattr(material, attr):
+                            sc = getattr(material, attr)
+                            break
+            
+            if sc is not None:
+                if hasattr(sc, "r") and hasattr(sc, "g") and hasattr(sc, "b"):
+                    try:
+                        color = (float(sc.r), float(sc.g), float(sc.b))
+                    except (TypeError, ValueError):
+                        pass
+                elif isinstance(sc, (list, tuple)) and len(sc) >= 3:
+                    try:
+                        color = (float(sc[0]), float(sc[1]), float(sc[2]))
+                    except (TypeError, ValueError):
+                        pass
+        except Exception:
+            pass
+
+        try:
+            transp = None
+            if hasattr(part, "ViewObject") and part.ViewObject is not None:
+                transp = getattr(part.ViewObject, "Transparency", None)
+            if transp is None and hasattr(part, "LinkedObject") and part.LinkedObject and hasattr(part.LinkedObject, "ViewObject") and part.LinkedObject.ViewObject:
+                transp = getattr(part.LinkedObject.ViewObject, "Transparency", None)
+            if transp is not None:
+                try:
+                    transparency = float(transp) / 100.0
+                except (TypeError, ValueError):
+                    pass
+        except Exception:
+            pass
+
+        return color, transparency
+
     def _export_visual_meshes_diag(
         self, node: "WbSolidNode", meshes_dir: Path, parts: list[Any], diag: list[str]
     ) -> None:
@@ -217,28 +269,7 @@ class WebotsExporter:
                 except Exception as e:
                     diag.append(f"  Node={node.name}: Mesh.export failed: {e}")
 
-                existing = node.geometries[0] if node.geometries else None
-                color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
-                transparency = existing.appearance.transparency if existing else 0.0
-
-                try:
-                    if hasattr(part, "ViewObject") and part.ViewObject is not None:
-                        vo = part.ViewObject
-                        sc = getattr(vo, "ShapeColor", None)
-                        if not sc and hasattr(part, "LinkedObject") and part.LinkedObject and hasattr(part.LinkedObject, "ViewObject") and part.LinkedObject.ViewObject:
-                            sc = getattr(part.LinkedObject.ViewObject, "ShapeColor", None)
-                        
-                        if isinstance(sc, tuple) and len(sc) >= 3:
-                            color = (sc[0], sc[1], sc[2])
-                            
-                        transp = getattr(vo, "Transparency", None)
-                        if transp is None and hasattr(part, "LinkedObject") and part.LinkedObject and hasattr(part.LinkedObject, "ViewObject") and part.LinkedObject.ViewObject:
-                            transp = getattr(part.LinkedObject.ViewObject, "Transparency", None)
-                            
-                        if transp is not None:
-                            transparency = float(transp) / 100.0
-                except Exception:
-                    pass
+                color, transparency = self._resolve_appearance(part, node)
 
                 if not node.geometries:
                     from .datamodel import WbShapeGeometry, WbAppearance
@@ -257,7 +288,10 @@ class WebotsExporter:
     def _export_visual_meshes(
         self, node: "WbSolidNode", meshes_dir: Path, parts: list[Any]
     ) -> None:
-        import Mesh
+        try:
+            import Mesh
+        except ImportError:
+            Mesh = None
         for joint in node.child_joints:
             if joint.child is not None:
                 self._export_visual_meshes(joint.child, meshes_dir, parts)
@@ -267,18 +301,18 @@ class WebotsExporter:
             if p_name == node.name:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 try:
-                    Mesh.export([part], str(obj_path))
+                    if Mesh is not None:
+                        Mesh.export([part], str(obj_path))
                 except Exception:
                     pass
 
-                existing = node.geometries[0] if node.geometries else None
-                color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
+                color, transparency = self._resolve_appearance(part, node)
                 if not node.geometries:
                     from .datamodel import WbShapeGeometry, WbAppearance
                     node.geometries.append(
                         WbShapeGeometry(
                             obj_relpath=f"meshes/{node.name}.obj",
-                            appearance=WbAppearance(diffuse_color=color),
+                            appearance=WbAppearance(diffuse_color=color, transparency=transparency),
                         )
                     )
                 break
@@ -428,7 +462,7 @@ class WebotsExporter:
             if p_name == node.name:
                 shape = getattr(part, "Shape", None)
                 if shape is not None:
-                    physics = calc.compute(shape)
+                    physics = calc.compute(part, shape)
                     if physics is not None:
                         node.physics = physics
                 break
@@ -436,31 +470,6 @@ class WebotsExporter:
             if joint.child is not None:
                 self._apply_physics(joint.child, parts)
 
-    def _export_visual_meshes(
-        self, node: WbSolidNode, meshes_dir: Path, parts: list[Any]
-    ) -> None:
-        for joint in node.child_joints:
-            if joint.child is not None:
-                self._export_visual_meshes(joint.child, meshes_dir, parts)
-
-        for part in parts:
-            p_name = getattr(part, "Label", "")
-            if p_name == node.name:
-                shape = getattr(part, "Shape", None)
-                if shape is not None:
-                    obj_path = meshes_dir / f"{node.name}.obj"
-                    existing = node.geometries[0] if node.geometries else None
-                    color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
-                    export_obj(shape, obj_path, color=color)
-                    if not node.geometries:
-                        from .datamodel import WbShapeGeometry, WbAppearance
-                        node.geometries.append(
-                            WbShapeGeometry(
-                                obj_relpath=f"meshes/{node.name}.obj",
-                                appearance=WbAppearance(diffuse_color=color),
-                            )
-                        )
-                break
 
     def _apply_collision_geometry(
         self, node: WbSolidNode, parts: list[Any], meshes_dir: Path
