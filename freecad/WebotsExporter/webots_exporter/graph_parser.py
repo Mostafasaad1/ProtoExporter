@@ -21,7 +21,6 @@ class AssemblyGraphParser:
         name: Optional[str] = None,
     ) -> None:
         self.adjacency[parent].add(child)
-        self.adjacency[child].add(parent)
         self.edge_types[(parent, child)] = joint_type
         self.edge_types[(child, parent)] = joint_type
         
@@ -39,17 +38,45 @@ class AssemblyGraphParser:
             raise MissingRootError("No parts in assembly graph")
         if len(self._part_names) == 1:
             return self._part_names[0]
-        degrees = {n: len(self.adjacency.get(n, set())) for n in self._part_names}
+            
         for n in self._part_names:
-            if degrees.get(n, 0) == 0:
+            has_connections = False
+            if n in self.adjacency and self.adjacency[n]:
+                has_connections = True
+            else:
+                for parent, children in self.adjacency.items():
+                    if n in children:
+                        has_connections = True
+                        break
+            if not has_connections:
                 raise MissingRootError(
                     f"Part '{n}' has no connections; cannot infer root"
                 )
-        min_deg = min(degrees.values())
-        candidates = [n for n, d in degrees.items() if d == min_deg]
-        if not candidates:
-            raise MissingRootError("No root candidate found in graph")
-        return candidates[0]
+
+        in_degrees = {n: 0 for n in self._part_names}
+        for parent, children in self.adjacency.items():
+            for child in children:
+                if child in in_degrees:
+                    in_degrees[child] += 1
+                    
+        roots = [n for n, in_deg in in_degrees.items() if in_deg == 0]
+        if len(roots) == 1:
+            return roots[0]
+        if len(roots) > 1:
+            out_degrees = {n: len(self.adjacency.get(n, set())) for n in roots}
+            return max(roots, key=lambda n: out_degrees[n])
+            
+        total_degrees = {}
+        for n in self._part_names:
+            out_deg = len(self.adjacency.get(n, set()))
+            in_deg = in_degrees.get(n, 0)
+            total_degrees[n] = out_deg + in_deg
+            
+        min_deg = min(total_degrees.values())
+        candidates = [n for n, d in total_degrees.items() if d == min_deg]
+        if candidates:
+            return candidates[0]
+        raise MissingRootError("No root candidate found in graph")
 
     def graph_density(self) -> float:
         n = len(self._part_names)
@@ -62,3 +89,4 @@ class AssemblyGraphParser:
     @property
     def part_names(self) -> list[str]:
         return list(self._part_names)
+
