@@ -20,6 +20,24 @@ def export_obj(
             pass
 
     if mesh is not None:
+        num_points = getattr(mesh, "CountPoints", None)
+        if num_points is None:
+            if hasattr(mesh, "countPoints"):
+                num_points = mesh.countPoints()
+            else:
+                num_points = len(getattr(mesh, "Points", []))
+                
+        if num_points > 100000:
+            try:
+                import FreeCAD
+                Mesh = FreeCAD.Mesh
+                dec_mesh = Mesh.Mesh(mesh)
+                dec_mesh.decimate(100000)
+                mesh = dec_mesh
+            except Exception:
+                pass
+
+    if mesh is not None:
         pts = getattr(mesh, "Points", [])
         for p in pts:
             vertices.append((p.x * 0.001, p.y * 0.001, p.z * 0.001))
@@ -72,7 +90,13 @@ def export_collision_stl(
         Mesh = FreeCAD.Mesh
         stl_mesh = Mesh.Mesh(mesh)
         if decimate:
-            target = max(1, int(mesh.countPoints * 0.1))
+            num_points = getattr(mesh, "CountPoints", None)
+            if num_points is None:
+                if hasattr(mesh, "countPoints"):
+                    num_points = mesh.countPoints()
+                else:
+                    num_points = len(getattr(mesh, "Points", []))
+            target = max(1, int(num_points * 0.1))
             stl_mesh.decimate(target)
         stl_mesh.write(str(output_path))
     except Exception:

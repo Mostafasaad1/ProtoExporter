@@ -260,24 +260,12 @@ class WebotsExporter:
             p_name = getattr(part, "Label", "")
             if p_name == node.name:
                 obj_path = meshes_dir / f"{node.name}.obj"
-                try:
-                    if Mesh is not None:
-                        import MeshPart
-                        mesh_obj = MeshPart.meshFromShape(part.Shape)
-                        if mesh_obj.countPoints > 100000:
-                            mesh_obj.decimate(100000)
-                        mesh_obj.write(str(obj_path))
-                        diag.append(f"  Node={node.name}: exported via decimate/MeshPart successfully")
-                    else:
-                        diag.append(f"  Node={node.name}: Mesh is None (test mode)")
-                except Exception as e:
-                    try:
-                        Mesh.export([part], str(obj_path))
-                        diag.append(f"  Node={node.name}: exported via Mesh.export fallback successfully")
-                    except Exception as e2:
-                        diag.append(f"  Node={node.name}: Mesh.export failed: {e2}")
-
                 color, transparency = self._resolve_appearance(part, node)
+                try:
+                    export_obj(part.Shape, obj_path, color=color)
+                    diag.append(f"  Node={node.name}: exported via export_obj successfully")
+                except Exception as e:
+                    diag.append(f"  Node={node.name}: export_obj failed: {e}")
 
                 if not node.geometries:
                     from .datamodel import WbShapeGeometry, WbAppearance
@@ -308,20 +296,11 @@ class WebotsExporter:
             p_name = getattr(part, "Label", "")
             if p_name == node.name:
                 obj_path = meshes_dir / f"{node.name}.obj"
-                try:
-                    if Mesh is not None:
-                        import MeshPart
-                        mesh_obj = MeshPart.meshFromShape(part.Shape)
-                        if mesh_obj.countPoints > 100000:
-                            mesh_obj.decimate(100000)
-                        mesh_obj.write(str(obj_path))
-                except Exception:
-                    try:
-                        Mesh.export([part], str(obj_path))
-                    except Exception:
-                        pass
-
                 color, transparency = self._resolve_appearance(part, node)
+                try:
+                    export_obj(part.Shape, obj_path, color=color)
+                except Exception:
+                    pass
                 if not node.geometries:
                     from .datamodel import WbShapeGeometry, WbAppearance
                     node.geometries.append(

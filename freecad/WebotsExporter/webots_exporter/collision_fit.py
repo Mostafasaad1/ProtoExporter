@@ -70,7 +70,13 @@ def decimate_mesh(
         from PySide import QtCore
         try:
             decimated = Mesh.Mesh(source_mesh)
-            decimated.decimate(int(source_mesh.countPoints * reduction))
+            num_points = getattr(source_mesh, "CountPoints", None)
+            if num_points is None:
+                if hasattr(source_mesh, "countPoints"):
+                    num_points = source_mesh.countPoints()
+                else:
+                    num_points = len(getattr(source_mesh, "Points", []))
+            decimated.decimate(int(num_points * reduction))
             return decimated
         except Exception:
             return None

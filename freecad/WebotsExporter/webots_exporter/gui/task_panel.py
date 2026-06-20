@@ -71,6 +71,48 @@ class ExportTaskPanel:
             return False
             
         import FreeCAD
+        import FreeCADGui
+        selection = FreeCADGui.Selection.getSelection()
+        has_assembly_sel = False
+        for obj in selection:
+            if obj.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
+                has_assembly_sel = True
+                break
+            curr = obj
+            while hasattr(curr, "getParentGroup") and curr.getParentGroup() is not None:
+                parent = curr.getParentGroup()
+                if parent.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
+                    has_assembly_sel = True
+                    break
+                curr = parent
+            if has_assembly_sel:
+                break
+                
+        if not has_assembly_sel:
+            doc = FreeCAD.ActiveDocument
+            has_any_assembly = False
+            if doc is not None:
+                for obj in doc.Objects:
+                    if obj.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
+                        has_any_assembly = True
+                        break
+            if not has_any_assembly:
+                QtWidgets.QMessageBox.critical(
+                    self.form,
+                    "No Assembly Found",
+                    "No Assembly exists in the active document to export."
+                )
+                return False
+                
+            reply = QtWidgets.QMessageBox.question(
+                self.form,
+                "No Selection",
+                "No Assembly is selected. Do you want to export the first Assembly found in the document?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            )
+            if reply != QtWidgets.QMessageBox.Yes:
+                return False
+
         from ..exporter import WebotsExporter
         from pathlib import Path
         
