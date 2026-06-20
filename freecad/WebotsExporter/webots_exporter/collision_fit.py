@@ -82,3 +82,63 @@ def decimate_mesh(
             return None
     except ImportError:
         return None
+
+
+def is_poor_primitive_fit(shape_volume: float, primitive: WbBoundingObject) -> bool:
+    """Returns True if the shape volume is less than 80% of the primitive volume."""
+    if shape_volume <= 0:
+        return False
+    
+    if primitive.kind == BoundingKind.BOX:
+        prim_vol = primitive.size.x * primitive.size.y * primitive.size.z
+    elif primitive.kind == BoundingKind.CYLINDER:
+        prim_vol = math.pi * (primitive.radius ** 2) * primitive.height
+    else:
+        return False
+        
+    if prim_vol <= 0:
+        return False
+        
+    prim_vol_mm3 = prim_vol * 1e9
+    return (shape_volume / prim_vol_mm3) < 0.8
+
+
+def compute_convex_hull_mesh(vertices: list[tuple[float, float, float]], output_path: str) -> bool:
+    """Computes a convex hull using scipy and saves it as an STL file."""
+    try:
+        import numpy as np
+        from scipy.spatial import ConvexHull
+    except ImportError:
+        return False
+        
+    if len(vertices) < 4:
+        return False
+        
+    try:
+        points = np.array(vertices)
+        hull = ConvexHull(points)
+        
+        with open(output_path, "w") as f:
+            f.write("solid convex_hull\n")
+            for simplex in hull.simplices:
+                pts_simplex = points[simplex]
+                
+                v1 = pts_simplex[1] - pts_simplex[0]
+                v2 = pts_simplex[2] - pts_simplex[0]
+                normal = np.cross(v1, v2)
+                norm = np.linalg.norm(normal)
+                if norm > 0:
+                    normal = normal / norm
+                else:
+                    normal = np.array([0.0, 0.0, 0.0])
+                    
+                f.write(f"  facet normal {normal[0]:.6f} {normal[1]:.6f} {normal[2]:.6f}\n")
+                f.write("    outer loop\n")
+                for p in pts_simplex:
+                    f.write(f"      vertex {p[0]:.6f} {p[1]:.6f} {p[2]:.6f}\n")
+                f.write("    endloop\n")
+                f.write("  endfacet\n")
+            f.write("endsolid convex_hull\n")
+        return True
+    except Exception:
+        return False

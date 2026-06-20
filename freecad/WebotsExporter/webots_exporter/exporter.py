@@ -7,7 +7,7 @@ from .tree_builder import KinematicTreeBuilder
 from .physics import PhysicsCalculator
 from .joint_introspect import dump_joint_properties
 from .fixed_contractor import FixedJointContractor
-from .collision_fit import fit_bounding_object
+from .collision_fit import fit_bounding_object, compute_convex_hull_mesh, is_poor_primitive_fit
 from .mesh_export import export_obj, export_collision_stl
 from .render import WbtRenderer
 from .exceptions import ExporterError
@@ -518,15 +518,45 @@ class WebotsExporter:
                             node.bounding_object = fit_bounding_object(
                                 vertices, prefer_cylinder=True
                             )
-                            if self.collision_strategy in (
-                                "Decimated Mesh Only", "auto"
-                            ):
-                                coll_path = meshes_dir / f"{node.name}_collision.stl"
+                            
+                            shape_volume = getattr(shape, "Volume", 0.0)
+                            is_poor = is_poor_primitive_fit(shape_volume, node.bounding_object)
+                            
+                            use_convex_hull = False
+                            use_decimated = False
+                            
+                            strategy_lower = self.collision_strategy.lower()
+                            if strategy_lower == "convex hull":
+                                use_convex_hull = True
+                            elif strategy_lower == "auto" and is_poor:
+                                use_convex_hull = True
+                            elif strategy_lower == "decimated mesh only":
+                                use_decimated = True
+                            
+                            coll_path = meshes_dir / f"{node.name}_collision.stl"
+                            rel_path = f"meshes/{node.name}_collision.stl"
+                            
+                            if use_convex_hull:
+                                hull_verts = [(v.x, v.y, v.z) for v in vertices_list]
+                                if compute_convex_hull_mesh(hull_verts, str(coll_path)):
+                                    node.bounding_object = WbBoundingObject(
+                                        kind=BoundingKind.MESH,
+                                        mesh_relpath=rel_path
+                                    )
+                                else:
+                                    with open(self.output_dir / "export_diagnostic.txt", "a") as f:
+                                        f.write(f"WARNING: Convex Hull failed for {node.name}, falling back to primitive/decimated mesh\n")
+                                    if strategy_lower == "convex hull":
+                                        use_decimated = True
+                            
+                            if use_decimated:
                                 try:
                                     if Mesh is not None:
                                         Mesh.export([part], str(coll_path))
-                                    if node.bounding_object.kind == BoundingKind.MESH:
-                                        node.bounding_object.mesh_relpath = str(coll_path)
+                                    node.bounding_object = WbBoundingObject(
+                                        kind=BoundingKind.MESH,
+                                        mesh_relpath=rel_path
+                                    )
                                 except Exception:
                                     pass
                     except Exception:

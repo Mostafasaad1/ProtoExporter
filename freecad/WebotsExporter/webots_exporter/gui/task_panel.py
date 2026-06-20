@@ -5,7 +5,7 @@ try:
 except ImportError:
     from PySide import QtGui as QtWidgets
 
-COLLISION_OPTIONS = ["Auto", "Primitives Only", "Decimated Mesh Only"]
+COLLISION_OPTIONS = ["Auto", "Primitives Only", "Decimated Mesh Only", "Convex Hull"]
 
 
 class ExportOptions:
