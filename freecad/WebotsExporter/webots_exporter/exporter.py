@@ -262,7 +262,7 @@ class WebotsExporter:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 color, transparency = self._resolve_appearance(part, node)
                 try:
-                    export_obj(part.Shape, obj_path, color=color)
+                    export_obj(part, obj_path, color=color)
                     diag.append(f"  Node={node.name}: exported via export_obj successfully")
                 except Exception as e:
                     diag.append(f"  Node={node.name}: export_obj failed: {e}")
@@ -298,7 +298,7 @@ class WebotsExporter:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 color, transparency = self._resolve_appearance(part, node)
                 try:
-                    export_obj(part.Shape, obj_path, color=color)
+                    export_obj(part, obj_path, color=color)
                 except Exception:
                     pass
                 if not node.geometries:

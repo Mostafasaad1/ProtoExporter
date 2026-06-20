@@ -15,7 +15,9 @@ HingeJoint {
     name "{{ joint.name }}_dummy"
     physics Physics {
       density -1
-      mass 0.0001
+      mass 0.01
+      centerOfMass [ 0 0 0 ]
+      inertiaMatrix [ 1e-4 1e-4 1e-4, 0 0 0 ]
     }
     children [
       SliderJoint {

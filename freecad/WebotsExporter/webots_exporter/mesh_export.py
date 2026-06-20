@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 
 def export_obj(
-    fc_shape: Any,
+    fc_part: Any,
     output_path: Path,
     color: Optional[tuple[float, float, float]] = None,
 ) -> None:
@@ -11,6 +11,7 @@ def export_obj(
     vertices: list[tuple[float, float, float]] = []
     faces: list[list[int]] = []
 
+    fc_shape = getattr(fc_part, "Shape", fc_part)
     mesh = getattr(fc_shape, "Mesh", None)
     if mesh is None:
         try:
@@ -21,50 +22,58 @@ def export_obj(
 
     if mesh is not None:
         num_points = getattr(mesh, "CountPoints", None)
-        if num_points is None:
+        if not isinstance(num_points, int):
             if hasattr(mesh, "countPoints"):
                 num_points = mesh.countPoints()
             else:
                 num_points = len(getattr(mesh, "Points", []))
                 
-        if num_points > 100000:
-            try:
-                import FreeCAD
-                Mesh = FreeCAD.Mesh
-                dec_mesh = Mesh.Mesh(mesh)
-                dec_mesh.decimate(100000)
-                mesh = dec_mesh
-            except Exception:
-                pass
+        if num_points > 0:
+            if num_points > 100000:
+                try:
+                    import FreeCAD
+                    Mesh = FreeCAD.Mesh
+                    dec_mesh = Mesh.Mesh(mesh)
+                    dec_mesh.decimate(100000)
+                    mesh = dec_mesh
+                except Exception:
+                    pass
 
-    if mesh is not None:
-        pts = getattr(mesh, "Points", [])
-        for p in pts:
-            vertices.append((p.x * 0.001, p.y * 0.001, p.z * 0.001))
-        facets = getattr(mesh, "Facets", [])
-        for f in facets:
-            faces.append(list(f.PointIndices))
+            pts = getattr(mesh, "Points", [])
+            for p in pts:
+                vertices.append((p.x * 0.001, p.y * 0.001, p.z * 0.001))
+            facets = getattr(mesh, "Facets", [])
+            for f in facets:
+                faces.append(list(f.PointIndices))
 
-    mtl_path = output_path.with_suffix(".mtl")
-    obj_name = output_path.name
-    mtl_name = mtl_path.name
+            mtl_path = output_path.with_suffix(".mtl")
+            obj_name = output_path.name
+            mtl_name = mtl_path.name
 
-    r, g, b = color or (0.8, 0.8, 0.8)
+            r, g, b = color or (0.8, 0.8, 0.8)
 
-    with open(mtl_path, "w") as f:
-        f.write(f"newmtl material_{obj_name}\n")
-        f.write(f"Kd {r} {g} {b}\n")
-        f.write("illum 1\n")
+            with open(mtl_path, "w") as f:
+                f.write(f"newmtl material_{obj_name}\n")
+                f.write(f"Kd {r} {g} {b}\n")
+                f.write("illum 1\n")
 
-    with open(output_path, "w") as f:
-        f.write(f"mtllib {mtl_name}\n")
-        f.write(f"o {obj_name}\n")
-        for v in vertices:
-            f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
-        f.write(f"usemtl material_{obj_name}\n")
-        for face in faces:
-            indices = " ".join(str(i + 1) for i in face)
-            f.write(f"f {indices}\n")
+            with open(output_path, "w") as f:
+                f.write(f"mtllib {mtl_name}\n")
+                f.write(f"o {obj_name}\n")
+                for v in vertices:
+                    f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
+                f.write(f"usemtl material_{obj_name}\n")
+                for face in faces:
+                    indices = " ".join(str(i + 1) for i in face)
+                    f.write(f"f {indices}\n")
+            return
+
+    # Fallback to FreeCAD native export for complex types like App::Link or App::Part
+    try:
+        import Mesh
+        Mesh.export([fc_part], str(output_path))
+    except Exception:
+        pass
 
 
 def export_collision_stl(
@@ -91,7 +100,7 @@ def export_collision_stl(
         stl_mesh = Mesh.Mesh(mesh)
         if decimate:
             num_points = getattr(mesh, "CountPoints", None)
-            if num_points is None:
+            if not isinstance(num_points, int):
                 if hasattr(mesh, "countPoints"):
                     num_points = mesh.countPoints()
                 else:
