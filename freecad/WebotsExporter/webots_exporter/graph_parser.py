@@ -19,6 +19,7 @@ class AssemblyGraphParser:
         anchor: Optional[Any] = None,
         axis: Optional[Any] = None,
         name: Optional[str] = None,
+        **kwargs: Any,
     ) -> None:
         self.adjacency[parent].add(child)
         self.edge_types[(parent, child)] = joint_type
@@ -29,6 +30,7 @@ class AssemblyGraphParser:
             "anchor": anchor,
             "axis": axis,
             "name": name,
+            **kwargs,
         }
         self.edge_properties[(parent, child)] = props
         self.edge_properties[(child, parent)] = props

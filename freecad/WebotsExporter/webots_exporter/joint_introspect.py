@@ -8,7 +8,7 @@ FREECAD_TO_WEBOTS_JOINT = {
     "Slider": JointType.SLIDER,
     "Ball": JointType.BALL,
     "Spherical": JointType.BALL,
-    "Cylindrical": JointType.HINGE,
+    "Cylindrical": JointType.CYLINDRICAL,
     "Screw": JointType.SLIDER,
     "Fixed": JointType.FIXED,
 }
@@ -66,9 +66,76 @@ def dump_joint_properties(fc_joint: Any) -> dict[str, Any]:
                 except Exception:
                     pass
 
+    import math
+
+    min_stop_rot = 0.0
+    max_stop_rot = 0.0
+    min_stop_trans = 0.0
+    max_stop_trans = 0.0
+
+    enable_min_rot = True
+    if hasattr(fc_joint, "EnableAngleMin"):
+        enable_min_rot = bool(fc_joint.EnableAngleMin)
+    elif hasattr(fc_joint, "EnableMinAngle"):
+        enable_min_rot = bool(fc_joint.EnableMinAngle)
+
+    enable_max_rot = True
+    if hasattr(fc_joint, "EnableAngleMax"):
+        enable_max_rot = bool(fc_joint.EnableAngleMax)
+    elif hasattr(fc_joint, "EnableMaxAngle"):
+        enable_max_rot = bool(fc_joint.EnableMaxAngle)
+
+    if enable_min_rot:
+        val = getattr(fc_joint, "AngleMin", getattr(fc_joint, "MinAngle", None))
+        if val is not None:
+            raw_val = getattr(val, "Value", val)
+            if isinstance(raw_val, (int, float)):
+                min_stop_rot = math.radians(raw_val)
+
+    if enable_max_rot:
+        val = getattr(fc_joint, "AngleMax", getattr(fc_joint, "MaxAngle", None))
+        if val is not None:
+            raw_val = getattr(val, "Value", val)
+            if isinstance(raw_val, (int, float)):
+                max_stop_rot = math.radians(raw_val)
+
+    enable_min_trans = True
+    if hasattr(fc_joint, "EnableLengthMin"):
+        enable_min_trans = bool(fc_joint.EnableLengthMin)
+    elif hasattr(fc_joint, "EnableMinLength"):
+        enable_min_trans = bool(fc_joint.EnableMinLength)
+    elif hasattr(fc_joint, "EnableDistanceMin"):
+        enable_min_trans = bool(fc_joint.EnableDistanceMin)
+
+    enable_max_trans = True
+    if hasattr(fc_joint, "EnableLengthMax"):
+        enable_max_trans = bool(fc_joint.EnableLengthMax)
+    elif hasattr(fc_joint, "EnableMaxLength"):
+        enable_max_trans = bool(fc_joint.EnableMaxLength)
+    elif hasattr(fc_joint, "EnableDistanceMax"):
+        enable_max_trans = bool(fc_joint.EnableDistanceMax)
+
+    if enable_min_trans:
+        val = getattr(fc_joint, "LengthMin", getattr(fc_joint, "MinLength", getattr(fc_joint, "DistanceMin", None)))
+        if val is not None:
+            raw_val = getattr(val, "Value", val)
+            if isinstance(raw_val, (int, float)):
+                min_stop_trans = raw_val / 1000.0
+
+    if enable_max_trans:
+        val = getattr(fc_joint, "LengthMax", getattr(fc_joint, "MaxLength", getattr(fc_joint, "DistanceMax", None)))
+        if val is not None:
+            raw_val = getattr(val, "Value", val)
+            if isinstance(raw_val, (int, float)):
+                max_stop_trans = raw_val / 1000.0
+
     return {
         "name": name,
         "joint_type": wb_type,
         "anchor": anchor,
         "axis": axis,
+        "min_stop_rot": min_stop_rot,
+        "max_stop_rot": max_stop_rot,
+        "min_stop_trans": min_stop_trans,
+        "max_stop_trans": max_stop_trans,
     }

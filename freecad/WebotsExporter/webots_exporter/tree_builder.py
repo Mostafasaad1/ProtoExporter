@@ -33,12 +33,32 @@ class KinematicTreeBuilder:
                 axis = props.get("axis") or WbVec3()
                 joint_name = props.get("name") or ""
 
+                min_stop_rot = props.get("min_stop_rot", 0.0)
+                max_stop_rot = props.get("max_stop_rot", 0.0)
+                min_stop_trans = props.get("min_stop_trans", 0.0)
+                max_stop_trans = props.get("max_stop_trans", 0.0)
+
+                min_stop = 0.0
+                max_stop = 0.0
+                if joint_type == JointType.HINGE:
+                    min_stop = min_stop_rot
+                    max_stop = max_stop_rot
+                elif joint_type == JointType.SLIDER:
+                    min_stop = min_stop_trans
+                    max_stop = max_stop_trans
+
                 child_solid = WbSolidNode(name=neighbor)
                 joint = WbJointNode(
                     joint_type=joint_type,
                     name=joint_name,
                     anchor=anchor,
                     axis=axis,
+                    min_stop=min_stop,
+                    max_stop=max_stop,
+                    min_stop_rot=min_stop_rot,
+                    max_stop_rot=max_stop_rot,
+                    min_stop_trans=min_stop_trans,
+                    max_stop_trans=max_stop_trans,
                     child=child_solid,
                 )
                 parent_solid.child_joints.append(joint)
@@ -54,7 +74,7 @@ def _map_joint_type(fc_type: str) -> JointType:
         "Ball": JointType.BALL,
         "Spherical": JointType.BALL,
         "Fixed": JointType.FIXED,
-        "Cylindrical": JointType.HINGE,
+        "Cylindrical": JointType.CYLINDRICAL,
         "Screw": JointType.SLIDER,
         "Hinge": JointType.HINGE,
     }

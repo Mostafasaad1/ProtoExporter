@@ -12,6 +12,7 @@ JOINT_TEMPLATE_MAP = {
     JointType.SLIDER: "joint_slider.proto.j2",
     JointType.BALL: "joint_ball.proto.j2",
     JointType.FIXED: "joint_fixed.proto.j2",
+    JointType.CYLINDRICAL: "joint_cylindrical.proto.j2",
 }
 
 

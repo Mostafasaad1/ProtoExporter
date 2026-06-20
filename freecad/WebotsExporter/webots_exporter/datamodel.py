@@ -12,6 +12,7 @@ class JointType(Enum):
     SLIDER = "Slider"
     BALL = "Ball"
     FIXED = "Fixed"
+    CYLINDRICAL = "Cylindrical"
 
 
 class BoundingKind(Enum):
@@ -82,6 +83,10 @@ class WbJointNode:
     axis: WbVec3 = field(default_factory=WbVec3)
     min_stop: float = 0.0
     max_stop: float = 0.0
+    min_stop_rot: float = 0.0
+    max_stop_rot: float = 0.0
+    min_stop_trans: float = 0.0
+    max_stop_trans: float = 0.0
     child: Optional[WbSolidNode] = None
 
 
