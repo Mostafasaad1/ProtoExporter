@@ -4,16 +4,21 @@ from typing import Optional
 from .datamodel import WbBoundingObject, WbVec3, BoundingKind
 
 
-def _fit_box(dx: float, dy: float, dz: float) -> WbBoundingObject:
+def _fit_box(dx: float, dy: float, dz: float, offset: Optional[WbVec3] = None) -> WbBoundingObject:
+    if offset is None:
+        offset = WbVec3()
     return WbBoundingObject(
         kind=BoundingKind.BOX,
         size=WbVec3(dx, dy, dz),
+        local_offset=offset,
     )
 
 
 def _try_fit_cylinder(
-    diameter: float, height: float, tolerance: float = 0.15
+    diameter: float, height: float, offset: Optional[WbVec3] = None, tolerance: float = 0.15
 ) -> Optional[WbBoundingObject]:
+    if offset is None:
+        offset = WbVec3()
     if diameter <= 0 or height <= 0:
         return None
     aspect = height / diameter
@@ -23,6 +28,7 @@ def _try_fit_cylinder(
         kind=BoundingKind.CYLINDER,
         radius=diameter / 2.0,
         height=height,
+        local_offset=offset,
     )
 
 
@@ -41,13 +47,18 @@ def fit_bounding_object(
     dy = max_y - min_y
     dz = max_z - min_z
 
+    center_x = (min_x + max_x) / 2.0
+    center_y = (min_y + max_y) / 2.0
+    center_z = (min_z + max_z) / 2.0
+    offset = WbVec3(center_x, center_y, center_z)
+
     if prefer_cylinder:
         diam = max(dx, dy)
-        cyl = _try_fit_cylinder(diam, dz)
+        cyl = _try_fit_cylinder(diam, dz, offset)
         if cyl is not None:
             return cyl
 
-    return _fit_box(dx, dy, dz)
+    return _fit_box(dx, dy, dz, offset)
 
 
 def decimate_mesh(

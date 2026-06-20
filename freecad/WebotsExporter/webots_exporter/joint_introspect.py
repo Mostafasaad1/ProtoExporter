@@ -1,5 +1,5 @@
 from typing import Any
-from .datamodel import WbVec3, WbAxisAngle, JointType
+from .datamodel import WbVec3, JointType
 from .exceptions import JointParsingError
 
 
@@ -28,20 +28,42 @@ def dump_joint_properties(fc_joint: Any) -> dict[str, Any]:
     if wb_type is None:
         raise JointParsingError(f"Unsupported joint type: {fc_type or type(fc_joint)}")
 
-    origin = getattr(fc_joint, "Placement", None)
+    ref1 = getattr(fc_joint, "Reference1", None)
+    placement1 = getattr(fc_joint, "Placement1", None)
+    
     anchor = WbVec3()
-    axis = WbAxisAngle()
+    axis = WbVec3(0, 0, 1) # Default axis is Z-axis
 
-    if origin is not None:
-        base = getattr(origin, "Base", None)
-        if base is not None:
-            anchor = WbVec3.from_mm(base.x, base.y, base.z)
-
-        rotation = getattr(origin, "Rotation", None)
-        if rotation is not None:
-            q = rotation.Q if hasattr(rotation, "Q") else None
-            if q is not None:
-                axis = _quat_to_axis_angle(q)
+    if ref1 and isinstance(ref1, (list, tuple)) and len(ref1) > 0 and placement1 is not None:
+        part = ref1[0]
+        if hasattr(part, "Placement"):
+            try:
+                global_placement = part.Placement.multiply(placement1)
+                pos = global_placement.Base
+                anchor = WbVec3.from_mm(pos.x, pos.y, pos.z)
+                
+                import FreeCAD
+                local_z = FreeCAD.Vector(0, 0, 1)
+                global_z = global_placement.Rotation.multVec(local_z)
+                axis = WbVec3(global_z.x, global_z.y, global_z.z)
+            except Exception:
+                pass
+    else:
+        # Fallback to Placement of joint
+        origin = getattr(fc_joint, "Placement", None)
+        if origin is not None:
+            base = getattr(origin, "Base", None)
+            if base is not None:
+                anchor = WbVec3.from_mm(base.x, base.y, base.z)
+            rotation = getattr(origin, "Rotation", None)
+            if rotation is not None:
+                try:
+                    import FreeCAD
+                    local_z = FreeCAD.Vector(0, 0, 1)
+                    global_z = rotation.multVec(local_z)
+                    axis = WbVec3(global_z.x, global_z.y, global_z.z)
+                except Exception:
+                    pass
 
     return {
         "name": name,
@@ -49,17 +71,3 @@ def dump_joint_properties(fc_joint: Any) -> dict[str, Any]:
         "anchor": anchor,
         "axis": axis,
     }
-
-
-def _quat_to_axis_angle(q: Any) -> WbAxisAngle:
-    _check = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]
-    angle = 2.0 * _acos_clamped(q[3])
-    s = (1.0 - q[3] * q[3]) ** 0.5
-    if s < 1e-6:
-        return WbAxisAngle(1, 0, 0, angle)
-    return WbAxisAngle(q[0] / s, q[1] / s, q[2] / s, angle)
-
-
-def _acos_clamped(v: float) -> float:
-    import math
-    return math.acos(max(-1.0, min(1.0, v)))

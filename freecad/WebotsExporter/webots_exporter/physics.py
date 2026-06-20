@@ -7,6 +7,7 @@ from .datamodel import WBT_SCALE
 class PhysicsCalculator:
     def compute(self, fc_shape: Any) -> Optional[WbPhysics]:
         mass = getattr(fc_shape, "Mass", None)
+        volume = getattr(fc_shape, "Volume", None)
         com = getattr(fc_shape, "CenterOfMass", None)
 
         if mass is None:
@@ -16,6 +17,14 @@ class PhysicsCalculator:
             mass_val = float(mass)
         except (TypeError, ValueError):
             raise PhysicsError(f"Invalid mass value: {mass}")
+
+        if volume is not None:
+            try:
+                vol_val = float(volume)
+                if vol_val > 0 and abs(mass_val - vol_val) / vol_val < 1e-4:
+                    mass_val *= 1e-6
+            except (TypeError, ValueError):
+                pass
 
         com_vec = WbVec3()
         if com is not None:

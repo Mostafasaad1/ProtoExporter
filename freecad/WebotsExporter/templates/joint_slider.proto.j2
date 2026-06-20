@@ -5,5 +5,10 @@ SliderJoint {
     minStop {{ joint.min_stop }}
     maxStop {{ joint.max_stop }}
   }
+  device [
+    LinearMotor {
+      name "{{ joint.name }}_motor"
+    }
+  ]
   endPoint {{ child_solid }}
 }

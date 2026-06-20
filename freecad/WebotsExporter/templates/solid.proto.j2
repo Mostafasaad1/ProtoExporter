@@ -1,5 +1,5 @@
 {% import "macros.j2" as m %}
-Solid {
+{{ node_type|default('Solid') }} {
   {% if is_root %}
   name IS name
   translation IS translation

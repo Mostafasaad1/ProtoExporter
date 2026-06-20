@@ -77,8 +77,9 @@ class WbPhysics:
 @dataclass
 class WbJointNode:
     joint_type: JointType = JointType.HINGE
+    name: str = ""
     anchor: WbVec3 = field(default_factory=WbVec3)
-    axis: WbAxisAngle = field(default_factory=WbAxisAngle)
+    axis: WbVec3 = field(default_factory=WbVec3)
     min_stop: float = 0.0
     max_stop: float = 0.0
     child: Optional[WbSolidNode] = None

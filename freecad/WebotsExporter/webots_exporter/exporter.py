@@ -59,10 +59,24 @@ class WebotsExporter:
                 parent_ref, child_ref = self._get_joint_parts(obj)
                 p_name = self._find_part_label(parent_ref, parts)
                 c_name = self._find_part_label(child_ref, parts)
+                
+                props_dump = []
+                for prop in obj.PropertiesList:
+                    try:
+                        val = getattr(obj, prop)
+                        props_dump.append(f"      {prop}: {val} (type={type(val).__name__})")
+                        if hasattr(val, "Base"):
+                            props_dump.append(f"        Base: {val.Base}")
+                        if hasattr(val, "Rotation"):
+                            props_dump.append(f"        Rotation: {val.Rotation}")
+                    except Exception as e:
+                        props_dump.append(f"      {prop}: ERROR {e}")
+                        
                 diag_lines.append(
                     f"  Joint={obj.Label} ({obj.TypeId})\n"
                     f"    ref1={parent_ref} -> '{p_name}'\n"
-                    f"    ref2={child_ref} -> '{c_name}'"
+                    f"    ref2={child_ref} -> '{c_name}'\n"
+                    + "\n".join(props_dump)
                 )
 
         diag_lines.append("")
@@ -311,7 +325,14 @@ class WebotsExporter:
         p_name = self._find_part_label(parent_ref, parts)
         c_name = self._find_part_label(child_ref, parts)
         if p_name and c_name:
-            parser.add_edge(p_name, c_name, props["joint_type"].value)
+            parser.add_edge(
+                p_name,
+                c_name,
+                props["joint_type"].value,
+                anchor=props.get("anchor"),
+                axis=props.get("axis"),
+                name=props.get("name"),
+            )
 
     def _apply_physics(self, node: WbSolidNode, parts: list[Any]) -> None:
         calc = PhysicsCalculator()
@@ -372,7 +393,10 @@ class WebotsExporter:
                     try:
                         vertices_list, _ = shape.tessellate(0.1)
                         if vertices_list:
-                            vertices = [(v.x, v.y, v.z) for v in vertices_list]
+                            vertices = [
+                                (v.x * 0.001, v.y * 0.001, v.z * 0.001)
+                                for v in vertices_list
+                            ]
                             node.bounding_object = fit_bounding_object(
                                 vertices, prefer_cylinder=True
                             )

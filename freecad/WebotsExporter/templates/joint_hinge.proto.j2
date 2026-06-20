@@ -6,5 +6,10 @@ HingeJoint {
     minStop {{ joint.min_stop }}
     maxStop {{ joint.max_stop }}
   }
+  device [
+    RotationalMotor {
+      name "{{ joint.name }}_motor"
+    }
+  ]
   endPoint {{ child_solid }}
 }

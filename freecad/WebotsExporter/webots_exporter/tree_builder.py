@@ -26,14 +26,19 @@ class KinematicTreeBuilder:
 
                 edge_key = (part_name, neighbor)
                 joint_type_str = self._parser.edge_types.get(edge_key, "Revolute")
-
                 joint_type = _map_joint_type(joint_type_str)
+
+                props = self._parser.edge_properties.get(edge_key, {})
+                anchor = props.get("anchor") or WbVec3()
+                axis = props.get("axis") or WbVec3()
+                joint_name = props.get("name") or ""
 
                 child_solid = WbSolidNode(name=neighbor)
                 joint = WbJointNode(
                     joint_type=joint_type,
-                    anchor=WbVec3(),
-                    axis=WbAxisAngle(),
+                    name=joint_name,
+                    anchor=anchor,
+                    axis=axis,
                     child=child_solid,
                 )
                 parent_solid.child_joints.append(joint)

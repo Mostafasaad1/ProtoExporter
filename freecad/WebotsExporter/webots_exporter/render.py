@@ -38,7 +38,25 @@ class WbtRenderer:
     def _render_solid(self, node: WbSolidNode, is_root: bool = False) -> str:
         template = self._env.get_template("solid.proto.j2")
         rendered_joints = [self._render_joint(j) for j in node.child_joints]
-        return template.render(node=node, joints=rendered_joints, is_root=is_root)
+        
+        node_type = "Solid"
+        if is_root and self._has_joints(node):
+            node_type = "Robot"
+            
+        return template.render(
+            node=node,
+            joints=rendered_joints,
+            is_root=is_root,
+            node_type=node_type,
+        )
+
+    def _has_joints(self, node: WbSolidNode) -> bool:
+        if node.child_joints:
+            return True
+        for joint in node.child_joints:
+            if joint.child and self._has_joints(joint.child):
+                return True
+        return False
 
     def _render_joint(self, joint: WbJointNode) -> str:
         tmpl_name = JOINT_TEMPLATE_MAP.get(joint.joint_type)

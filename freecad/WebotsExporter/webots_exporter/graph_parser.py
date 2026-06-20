@@ -9,12 +9,30 @@ class AssemblyGraphParser:
         self._part_names = list(part_names)
         self.adjacency: dict[str, set[str]] = defaultdict(set)
         self.edge_types: dict[tuple[str, str], str] = {}
+        self.edge_properties: dict[tuple[str, str], dict[str, Any]] = {}
 
-    def add_edge(self, parent: str, child: str, joint_type: str) -> None:
+    def add_edge(
+        self,
+        parent: str,
+        child: str,
+        joint_type: str,
+        anchor: Optional[Any] = None,
+        axis: Optional[Any] = None,
+        name: Optional[str] = None,
+    ) -> None:
         self.adjacency[parent].add(child)
         self.adjacency[child].add(parent)
         self.edge_types[(parent, child)] = joint_type
         self.edge_types[(child, parent)] = joint_type
+        
+        props = {
+            "joint_type": joint_type,
+            "anchor": anchor,
+            "axis": axis,
+            "name": name,
+        }
+        self.edge_properties[(parent, child)] = props
+        self.edge_properties[(child, parent)] = props
 
     def infer_root(self) -> str:
         if not self._part_names:
