@@ -1,4 +1,5 @@
 #VRML_SIM R2025a utf8
+# template language: javascript
 PROTO {{ proto_name }} [
   field SFVec3f    translation 0 0 0
   field SFRotation rotation    0 0 1 0
@@ -9,7 +10,9 @@ PROTO {{ proto_name }} [
   field SFString   customData  ""
   field SFBool     supervisor  FALSE
   field SFBool     synchronization TRUE
+  field SFBool     selfCollision   FALSE
 {% endif %}
+  field SFBool     staticBase  TRUE
 ]
 {
 {{ root_solid }}

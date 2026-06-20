@@ -10,6 +10,7 @@
   customData IS customData
   supervisor IS supervisor
   synchronization IS synchronization
+  selfCollision IS selfCollision
   {% endif %}
   {% else %}
   name "{{ node.name }}"
@@ -28,6 +29,13 @@
   {{ m.bounding_block(node.bounding_object) }}
   {% endif %}
   {% if node.physics %}
+  {% if is_root %}
+  %< if (!fields.staticBase.value) { >%
+  {% endif %}
   {{ m.physics_block(node.physics) }}
+  {% if is_root %}
+  %< } >%
+  {% endif %}
   {% endif %}
 }
+
