@@ -262,12 +262,20 @@ class WebotsExporter:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 try:
                     if Mesh is not None:
-                        Mesh.export([part], str(obj_path))
-                        diag.append(f"  Node={node.name}: exported via Mesh.export successfully")
+                        import MeshPart
+                        mesh_obj = MeshPart.meshFromShape(part.Shape)
+                        if mesh_obj.countPoints > 100000:
+                            mesh_obj.decimate(100000)
+                        mesh_obj.write(str(obj_path))
+                        diag.append(f"  Node={node.name}: exported via decimate/MeshPart successfully")
                     else:
                         diag.append(f"  Node={node.name}: Mesh is None (test mode)")
                 except Exception as e:
-                    diag.append(f"  Node={node.name}: Mesh.export failed: {e}")
+                    try:
+                        Mesh.export([part], str(obj_path))
+                        diag.append(f"  Node={node.name}: exported via Mesh.export fallback successfully")
+                    except Exception as e2:
+                        diag.append(f"  Node={node.name}: Mesh.export failed: {e2}")
 
                 color, transparency = self._resolve_appearance(part, node)
 
@@ -302,9 +310,16 @@ class WebotsExporter:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 try:
                     if Mesh is not None:
-                        Mesh.export([part], str(obj_path))
+                        import MeshPart
+                        mesh_obj = MeshPart.meshFromShape(part.Shape)
+                        if mesh_obj.countPoints > 100000:
+                            mesh_obj.decimate(100000)
+                        mesh_obj.write(str(obj_path))
                 except Exception:
-                    pass
+                    try:
+                        Mesh.export([part], str(obj_path))
+                    except Exception:
+                        pass
 
                 color, transparency = self._resolve_appearance(part, node)
                 if not node.geometries:
@@ -318,10 +333,32 @@ class WebotsExporter:
                 break
     def _collect_parts(self, fc_document: Any) -> list[Any]:
         assembly = None
-        for obj in fc_document.Objects:
-            if obj.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
-                assembly = obj
-                break
+        try:
+            import FreeCADGui
+            selection = FreeCADGui.Selection.getSelection()
+            for obj in selection:
+                if obj.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
+                    assembly = obj
+                    break
+            if assembly is None:
+                for obj in selection:
+                    curr = obj
+                    while hasattr(curr, "getParentGroup") and curr.getParentGroup() is not None:
+                        parent = curr.getParentGroup()
+                        if parent.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
+                            assembly = parent
+                            break
+                        curr = parent
+                    if assembly is not None:
+                        break
+        except Exception:
+            pass
+
+        if assembly is None:
+            for obj in fc_document.Objects:
+                if obj.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
+                    assembly = obj
+                    break
                 
         parts = []
         if assembly is not None:
