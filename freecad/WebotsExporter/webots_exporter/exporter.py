@@ -113,6 +113,9 @@ class WebotsExporter:
         proto_content = self.renderer.render_proto(self.world_name, root_solid)
         proto_path.write_text(proto_content, encoding="utf-8")
 
+        if self.renderer.has_joints(root_solid):
+            self._write_test_controller(diag_lines)
+
         diag_lines.append("")
         diag_lines.append("-- Generated PROTO --")
         diag_lines.append(proto_content)
@@ -123,6 +126,69 @@ class WebotsExporter:
             _FreeCAD.Console.PrintMessage(f"[ProtoExporter] Diagnostic: {diag_path}\n")
 
         return proto_path
+
+    def _write_test_controller(self, diag: list[str]) -> None:
+        controller_name = f"{self.world_name}_controller"
+        project_dir = self.output_dir.parent
+        controllers_dir = project_dir / "controllers"
+        controller_dir = controllers_dir / controller_name
+        
+        try:
+            controller_dir.mkdir(parents=True, exist_ok=True)
+            controller_file = controller_dir / f"{controller_name}.py"
+            
+            code = (
+                "import math\n"
+                "from controller import Robot, Motor\n\n"
+                "robot = Robot()\n"
+                "timestep = int(robot.getBasicTimeStep())\n\n"
+                "motors = []\n"
+                "n = robot.getNumberOfDevices()\n"
+                "for i in range(n):\n"
+                "    device = robot.getDeviceByIndex(i)\n"
+                "    if isinstance(device, Motor):\n"
+                "        motors.append(device)\n"
+                "        device.setPosition(0.0)\n"
+                "        device.setVelocity(1.0)\n\n"
+                "print(f'[{robot.getName()}] Found {len(motors)} motors: {[m.getName() for m in motors]}')\n\n"
+                "def get_target(motor):\n"
+                "    if motor.getType() == Motor.LINEAR:\n"
+                "        return 0.05\n"
+                "    return 0.5\n\n"
+                "motor_index = 0\n"
+                "phase = 0\n"
+                "start_time = robot.getTime()\n"
+                "duration = 2.0\n\n"
+                "while robot.step(timestep) != -1:\n"
+                "    if not motors:\n"
+                "        continue\n"
+                "    if motor_index >= len(motors):\n"
+                "        motor_index = 0\n"
+                "        phase = 0\n"
+                "        start_time = robot.getTime()\n"
+                "        continue\n\n"
+                "    current_time = robot.getTime()\n"
+                "    elapsed = current_time - start_time\n"
+                "    motor = motors[motor_index]\n\n"
+                "    if phase == 0:\n"
+                "        target = get_target(motor)\n"
+                "        motor.setPosition(target)\n"
+                "        phase = 1\n"
+                "        start_time = current_time\n"
+                "    elif phase == 1:\n"
+                "        if elapsed >= duration:\n"
+                "            motor.setPosition(0.0)\n"
+                "            phase = 2\n"
+                "            start_time = current_time\n"
+                "    elif phase == 2:\n"
+                "        if elapsed >= duration:\n"
+                "            phase = 0\n"
+                "            motor_index += 1\n"
+            )
+            controller_file.write_text(code, encoding="utf-8")
+            diag.append(f"  Controller={controller_name}: generated successfully at {controller_file}")
+        except Exception as e:
+            diag.append(f"  Controller={controller_name}: generation failed: {e}")
 
     def _export_visual_meshes_diag(
         self, node: "WbSolidNode", meshes_dir: Path, parts: list[Any], diag: list[str]
