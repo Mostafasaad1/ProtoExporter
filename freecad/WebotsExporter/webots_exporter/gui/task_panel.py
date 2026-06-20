@@ -55,6 +55,13 @@ class ExportTaskPanel:
 
         # Joint motors & sensors mapping section
         layout.addWidget(QtWidgets.QLabel("Joint Motors & Sensors Configuration:"))
+        
+        btn_layout = QtWidgets.QHBoxLayout()
+        self._btn_all_actuated = QtWidgets.QPushButton("Select All Actuators")
+        self._btn_all_sensed = QtWidgets.QPushButton("Select All Sensors")
+        btn_layout.addWidget(self._btn_all_actuated)
+        btn_layout.addWidget(self._btn_all_sensed)
+        layout.addLayout(btn_layout)
 
         # Table of joints
         self.table = QtWidgets.QTableWidget()
@@ -71,6 +78,8 @@ class ExportTaskPanel:
         layout.addWidget(self.table)
 
         self._browse_btn.clicked.connect(self._on_browse)
+        self._btn_all_actuated.clicked.connect(self._select_all_actuated)
+        self._btn_all_sensed.clicked.connect(self._select_all_sensed)
         self.options = ExportOptions()
         self._joints = []
         
@@ -133,6 +142,20 @@ class ExportTaskPanel:
             
             sens_layout.addWidget(sens_cb)
             self.table.setCellWidget(i, 2, sens_widget)
+
+    def _select_all_actuated(self) -> None:
+        self._set_all_checkboxes(1, True)
+
+    def _select_all_sensed(self) -> None:
+        self._set_all_checkboxes(2, True)
+
+    def _set_all_checkboxes(self, col: int, state: bool) -> None:
+        for i in range(self.table.rowCount()):
+            widget = self.table.cellWidget(i, col)
+            if widget:
+                cb = widget.layout().itemAt(0).widget()
+                if isinstance(cb, QtWidgets.QCheckBox):
+                    cb.setChecked(state)
 
     def _on_browse(self) -> None:
         directory = QtWidgets.QFileDialog.getExistingDirectory(

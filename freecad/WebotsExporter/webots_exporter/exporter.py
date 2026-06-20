@@ -525,12 +525,11 @@ class WebotsExporter:
                             use_convex_hull = False
                             use_decimated = False
                             
-                            strategy_lower = self.collision_strategy.lower()
-                            if strategy_lower == "convex hull":
+                            if self.collision_strategy == "Convex Hull":
                                 use_convex_hull = True
-                            elif strategy_lower == "auto" and is_poor:
+                            elif self.collision_strategy == "auto" and is_poor:
                                 use_convex_hull = True
-                            elif strategy_lower == "decimated mesh only":
+                            elif self.collision_strategy == "Decimated Mesh Only":
                                 use_decimated = True
                             
                             coll_path = meshes_dir / f"{node.name}_collision.stl"
@@ -546,7 +545,7 @@ class WebotsExporter:
                                 else:
                                     with open(self.output_dir / "export_diagnostic.txt", "a") as f:
                                         f.write(f"WARNING: Convex Hull failed for {node.name}, falling back to primitive/decimated mesh\n")
-                                    if strategy_lower == "convex hull":
+                                    if self.collision_strategy == "Convex Hull":
                                         use_decimated = True
                             
                             if use_decimated:
