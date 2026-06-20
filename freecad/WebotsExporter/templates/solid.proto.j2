@@ -4,6 +4,13 @@
   name IS name
   translation IS translation
   rotation IS rotation
+  {% if node_type == 'Robot' %}
+  controller IS controller
+  controllerArgs IS controllerArgs
+  customData IS customData
+  supervisor IS supervisor
+  synchronization IS synchronization
+  {% endif %}
   {% else %}
   name "{{ node.name }}"
   translation {{ m.vec3(node.translation) }}

@@ -153,12 +153,33 @@ class WebotsExporter:
 
                 existing = node.geometries[0] if node.geometries else None
                 color = existing.appearance.diffuse_color if existing else (0.8, 0.8, 0.8)
+                transparency = existing.appearance.transparency if existing else 0.0
+
+                try:
+                    if hasattr(part, "ViewObject") and part.ViewObject is not None:
+                        vo = part.ViewObject
+                        sc = getattr(vo, "ShapeColor", None)
+                        if not sc and hasattr(part, "LinkedObject") and part.LinkedObject and hasattr(part.LinkedObject, "ViewObject") and part.LinkedObject.ViewObject:
+                            sc = getattr(part.LinkedObject.ViewObject, "ShapeColor", None)
+                        
+                        if isinstance(sc, tuple) and len(sc) >= 3:
+                            color = (sc[0], sc[1], sc[2])
+                            
+                        transp = getattr(vo, "Transparency", None)
+                        if transp is None and hasattr(part, "LinkedObject") and part.LinkedObject and hasattr(part.LinkedObject, "ViewObject") and part.LinkedObject.ViewObject:
+                            transp = getattr(part.LinkedObject.ViewObject, "Transparency", None)
+                            
+                        if transp is not None:
+                            transparency = float(transp) / 100.0
+                except Exception:
+                    pass
+
                 if not node.geometries:
                     from .datamodel import WbShapeGeometry, WbAppearance
                     node.geometries.append(
                         WbShapeGeometry(
                             obj_relpath=f"meshes/{node.name}.obj",
-                            appearance=WbAppearance(diffuse_color=color),
+                            appearance=WbAppearance(diffuse_color=color, transparency=transparency),
                         )
                     )
                 obj_size = obj_path.stat().st_size if obj_path.exists() else 0
