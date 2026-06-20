@@ -52,7 +52,10 @@ def _map_joint_type(fc_type: str) -> JointType:
         "Revolute": JointType.HINGE,
         "Slider": JointType.SLIDER,
         "Ball": JointType.BALL,
-        "Fixed": JointType.HINGE,
+        "Spherical": JointType.BALL,
+        "Fixed": JointType.FIXED,
         "Cylindrical": JointType.HINGE,
+        "Screw": JointType.SLIDER,
+        "Hinge": JointType.HINGE,
     }
     return mapping.get(fc_type, JointType.HINGE)

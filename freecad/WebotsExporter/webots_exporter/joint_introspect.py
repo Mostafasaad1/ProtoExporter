@@ -7,6 +7,7 @@ FREECAD_TO_WEBOTS_JOINT = {
     "Revolute": JointType.HINGE,
     "Slider": JointType.SLIDER,
     "Ball": JointType.BALL,
+    "Spherical": JointType.BALL,
     "Cylindrical": JointType.HINGE,
     "Screw": JointType.SLIDER,
     "Fixed": JointType.FIXED,

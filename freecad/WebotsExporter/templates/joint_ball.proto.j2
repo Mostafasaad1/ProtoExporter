@@ -3,5 +3,21 @@ BallJoint {
   jointParameters BallJointParameters {
     anchor {{ m.vec3(joint.anchor) }}
   }
+  device [
+    RotationalMotor {
+      name "{{ joint.name }}_motor"
+    }
+  ]
+  device2 [
+    RotationalMotor {
+      name "{{ joint.name }}_motor2"
+    }
+  ]
+  device3 [
+    RotationalMotor {
+      name "{{ joint.name }}_motor3"
+    }
+  ]
   endPoint {{ child_solid }}
 }
+

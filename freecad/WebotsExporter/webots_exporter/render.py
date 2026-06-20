@@ -11,6 +11,7 @@ JOINT_TEMPLATE_MAP = {
     JointType.HINGE: "joint_hinge.proto.j2",
     JointType.SLIDER: "joint_slider.proto.j2",
     JointType.BALL: "joint_ball.proto.j2",
+    JointType.FIXED: "joint_fixed.proto.j2",
 }
 
 
