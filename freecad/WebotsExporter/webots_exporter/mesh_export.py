@@ -2,6 +2,24 @@ from pathlib import Path
 from typing import Any, Optional
 
 
+def get_outer_shell_shape(fc_shape: Any) -> Any:
+    if fc_shape is not None:
+        try:
+            import Part
+            if hasattr(fc_shape, "Solids") and fc_shape.Solids:
+                outer_shells = []
+                for s in fc_shape.Solids:
+                    if s.Shells:
+                        outer_shells.append(s.Shells[0])
+                if outer_shells:
+                    return Part.makeCompound(outer_shells)
+            elif hasattr(fc_shape, "Shells") and fc_shape.Shells:
+                return fc_shape.Shells[0]
+        except Exception:
+            pass
+    return fc_shape
+
+
 def export_obj(
     fc_part: Any,
     output_path: Path,
@@ -11,12 +29,19 @@ def export_obj(
     vertices: list[tuple[float, float, float]] = []
     faces: list[list[int]] = []
 
-    fc_shape = getattr(fc_part, "Shape", fc_part)
+    actual_part = fc_part
+    if hasattr(fc_part, "TypeId") and isinstance(fc_part.TypeId, str) and "Link" in fc_part.TypeId:
+        actual_part = getattr(fc_part, "LinkedObject", fc_part) or fc_part
+    
+    fc_shape = getattr(actual_part, "Shape", actual_part)
+    fc_shape = get_outer_shell_shape(fc_shape)
+
     mesh = getattr(fc_shape, "Mesh", None)
-    if mesh is None:
+    if mesh is None and fc_shape is not None:
         try:
             import MeshPart
-            mesh = MeshPart.meshFromShape(fc_shape)
+            # Use very fine deflection for highest visual quality
+            mesh = MeshPart.meshFromShape(Shape=fc_shape, LinearDeflection=0.05, AngularDeflection=0.15)
         except Exception:
             pass
 
@@ -29,16 +54,6 @@ def export_obj(
                 num_points = len(getattr(mesh, "Points", []))
                 
         if num_points > 0:
-            if num_points > 100000:
-                try:
-                    import FreeCAD
-                    Mesh = FreeCAD.Mesh
-                    dec_mesh = Mesh.Mesh(mesh)
-                    dec_mesh.decimate(100000)
-                    mesh = dec_mesh
-                except Exception:
-                    pass
-
             pts = getattr(mesh, "Points", [])
             for p in pts:
                 vertices.append((p.x * 0.001, p.y * 0.001, p.z * 0.001))
@@ -70,10 +85,19 @@ def export_obj(
 
     # Fallback to FreeCAD native export for complex types like App::Link or App::Part
     try:
+        import FreeCAD
         import Mesh
-        Mesh.export([fc_part], str(output_path))
-    except Exception:
-        pass
+        exported = False
+        if fc_shape is not None:
+            try:
+                Mesh.export([fc_shape], str(output_path))
+                exported = True
+            except Exception:
+                pass
+        if not exported:
+            Mesh.export([fc_part], str(output_path))
+    except Exception as e:
+        print(f"Fallback export failed: {e}")
 
 
 def export_collision_stl(
@@ -99,14 +123,12 @@ def export_collision_stl(
         Mesh = FreeCAD.Mesh
         stl_mesh = Mesh.Mesh(mesh)
         if decimate:
-            num_points = getattr(mesh, "CountPoints", None)
-            if not isinstance(num_points, int):
-                if hasattr(mesh, "countPoints"):
-                    num_points = mesh.countPoints()
-                else:
-                    num_points = len(getattr(mesh, "Points", []))
-            target = max(1, int(num_points * 0.1))
-            stl_mesh.decimate(target)
+            stl_mesh.decimate(1.0, 0.95)
+            
+        mat = FreeCAD.Matrix()
+        mat.scale(0.001, 0.001, 0.001)
+        stl_mesh.transformGeometry(mat)
+        
         stl_mesh.write(str(output_path))
     except Exception:
         _write_fallback_stl(mesh, output_path)

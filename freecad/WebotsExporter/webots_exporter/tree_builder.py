@@ -2,7 +2,7 @@ from collections import deque
 from typing import Optional
 
 from .datamodel import WbSolidNode, WbJointNode, WbVec3, WbAxisAngle, JointType
-from .graph_parser import AssemblyGraphParser
+from .graph_parser import AssemblyGraphParser, parse_sensor_type
 
 
 class KinematicTreeBuilder:
@@ -13,13 +13,14 @@ class KinematicTreeBuilder:
         visited: set[str] = set()
         queue: deque[tuple[str, WbSolidNode]] = deque()
 
-        root = WbSolidNode(name=root_name)
+        root = WbSolidNode(name=root_name, sensor_type=parse_sensor_type(root_name))
         visited.add(root_name)
         queue.append((root_name, root))
 
+
         while queue:
             part_name, parent_solid = queue.popleft()
-            for neighbor in self._parser.adjacency.get(part_name, set()):
+            for neighbor in self._parser.undirected_adjacency.get(part_name, set()):
                 if neighbor in visited:
                     continue
                 visited.add(neighbor)
@@ -50,7 +51,7 @@ class KinematicTreeBuilder:
                 actuated = props.get("actuated", False)
                 sensed = props.get("sensed", False)
 
-                child_solid = WbSolidNode(name=neighbor)
+                child_solid = WbSolidNode(name=neighbor, sensor_type=parse_sensor_type(neighbor))
                 joint = WbJointNode(
                     joint_type=joint_type,
                     name=joint_name,

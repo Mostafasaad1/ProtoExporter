@@ -8,11 +8,25 @@ from .physics import PhysicsCalculator
 from .joint_introspect import dump_joint_properties
 from .fixed_contractor import FixedJointContractor
 from .collision_fit import fit_bounding_object, compute_convex_hull_mesh, is_poor_primitive_fit
-from .mesh_export import export_obj, export_collision_stl
+from .mesh_export import export_obj, export_collision_stl, get_outer_shell_shape
 from .render import WbtRenderer
 from .exceptions import ExporterError
 
 CollisionStrategy = str
+
+
+def sanitize_name(name: str) -> str:
+    """Convert a FreeCAD part label to a valid Webots node/device name.
+
+    Webots names are used as device identifiers and as VRML node names.
+    They must not contain spaces, parentheses, or other VRML-special chars.
+    Strategy: replace any run of non-alphanumeric characters (except '_') with '_',
+    then strip leading/trailing underscores.
+    """
+    import re
+    sanitized = re.sub(r'[^A-Za-z0-9_]+', '_', name)
+    sanitized = sanitized.strip('_')
+    return sanitized or "link"
 
 
 class WebotsExporter:
@@ -83,11 +97,16 @@ class WebotsExporter:
         diag_lines.append(f"-- Graph Names: {parser.part_names}")
         diag_lines.append(f"-- Graph Adjacency: {dict(parser.adjacency)}")
 
+        fixed_parts = []
+        for part in parts:
+            if getattr(part, "fixedPosition", False) or getattr(part, "isFixed", False):
+                fixed_parts.append(getattr(part, "Label", getattr(part, "Name", "")))
+
         contractor = FixedJointContractor(parser)
         contractor.contract()
 
         try:
-            root_name = parser.infer_root()
+            root_name = parser.infer_root(fixed_parts=fixed_parts)
         except Exception as e:
             diag_lines.append(f"\nERROR in infer_root: {e}")
             diag_path = self.output_dir / "export_diagnostic.txt"
@@ -98,6 +117,9 @@ class WebotsExporter:
         builder = KinematicTreeBuilder(parser)
         root_solid = builder.build(root_name)
         diag_lines.append(f"\n-- Root: {root_name}")
+
+        # Sanitize node names so Webots VRML is valid (no spaces/parens)
+        self._sanitize_tree(root_solid)
 
         self._apply_physics(root_solid, parts)
 
@@ -242,6 +264,15 @@ class WebotsExporter:
 
         return color, transparency
 
+    def _sanitize_tree(self, node: "WbSolidNode") -> None:
+        """Walk the tree, storing the raw FC label and renaming node.name to a VRML-safe identifier."""
+        if node.name and node.name not in node.source_fc_names:
+            node.source_fc_names.append(node.name)
+        node.name = sanitize_name(node.name)
+        for joint in node.child_joints:
+            if joint.child is not None:
+                self._sanitize_tree(joint.child)
+
     def _export_visual_meshes_diag(
         self, node: "WbSolidNode", meshes_dir: Path, parts: list[Any], diag: list[str]
     ) -> None:
@@ -256,9 +287,11 @@ class WebotsExporter:
             if joint.child is not None:
                 self._export_visual_meshes_diag(joint.child, meshes_dir, parts, diag)
 
+        # Match part by original FC label (source_fc_names) or node.name
+        fc_labels = node.source_fc_names if node.source_fc_names else [node.name]
         for part in parts:
             p_name = getattr(part, "Label", "")
-            if p_name == node.name:
+            if p_name in fc_labels:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 color, transparency = self._resolve_appearance(part, node)
                 try:
@@ -292,9 +325,10 @@ class WebotsExporter:
             if joint.child is not None:
                 self._export_visual_meshes(joint.child, meshes_dir, parts)
 
+        fc_labels = node.source_fc_names if node.source_fc_names else [node.name]
         for part in parts:
             p_name = getattr(part, "Label", "")
-            if p_name == node.name:
+            if p_name in fc_labels:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 color, transparency = self._resolve_appearance(part, node)
                 try:
@@ -310,6 +344,7 @@ class WebotsExporter:
                         )
                     )
                 break
+
     def _collect_parts(self, fc_document: Any) -> list[Any]:
         assembly = None
         try:
@@ -479,9 +514,10 @@ class WebotsExporter:
 
     def _apply_physics(self, node: WbSolidNode, parts: list[Any]) -> None:
         calc = PhysicsCalculator()
+        fc_labels = node.source_fc_names if node.source_fc_names else [node.name]
         for part in parts:
             p_name = getattr(part, "Label", "")
-            if p_name == node.name:
+            if p_name in fc_labels:
                 shape = getattr(part, "Shape", None)
                 if shape is not None:
                     physics = calc.compute(part, shape)
@@ -502,11 +538,14 @@ class WebotsExporter:
         except ImportError:
             FreeCAD = None
             Mesh = None
+        fc_labels = node.source_fc_names if node.source_fc_names else [node.name]
         for part in parts:
             p_name = getattr(part, "Label", "")
-            if p_name == node.name:
+            if p_name in fc_labels:
                 shape = getattr(part, "Shape", None)
                 if shape is not None:
+                    # Apply outer shell logic for convex hull & decimation performance
+                    shape = get_outer_shell_shape(shape)
                     # Get vertices via TopoShape.tessellate
                     try:
                         vertices_list, _ = shape.tessellate(0.1)
@@ -536,8 +575,7 @@ class WebotsExporter:
                             rel_path = f"meshes/{node.name}_collision.stl"
                             
                             if use_convex_hull:
-                                hull_verts = [(v.x, v.y, v.z) for v in vertices_list]
-                                if compute_convex_hull_mesh(hull_verts, str(coll_path)):
+                                if compute_convex_hull_mesh(vertices, str(coll_path)):
                                     node.bounding_object = WbBoundingObject(
                                         kind=BoundingKind.MESH,
                                         mesh_relpath=rel_path
@@ -550,8 +588,7 @@ class WebotsExporter:
                             
                             if use_decimated:
                                 try:
-                                    if Mesh is not None:
-                                        Mesh.export([part], str(coll_path))
+                                    export_collision_stl(shape, coll_path, decimate=True)
                                     node.bounding_object = WbBoundingObject(
                                         kind=BoundingKind.MESH,
                                         mesh_relpath=rel_path

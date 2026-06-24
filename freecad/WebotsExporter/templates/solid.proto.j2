@@ -1,5 +1,5 @@
 {% import "macros.j2" as m %}
-{{ node_type|default('Solid') }} {
+{{ node.sensor_type if node.sensor_type else (node_type|default('Solid')) }} {
   {% if is_root %}
   name IS name
   translation IS translation

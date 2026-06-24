@@ -103,3 +103,5 @@ class WbSolidNode:
     physics: Optional[WbPhysics] = None
     child_joints: list[WbJointNode] = field(default_factory=list)
     source_fc_names: list[str] = field(default_factory=list)
+    sensor_type: Optional[str] = field(default=None)
+

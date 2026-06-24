@@ -114,32 +114,47 @@ class PhysicsCalculator:
         volume = getattr(fc_shape, "Volume", None)
         com = getattr(fc_shape, "CenterOfMass", None)
 
-        if mass is None:
-            return None
-
-        try:
-            mass_val = float(mass)
-        except (TypeError, ValueError):
-            raise PhysicsError(f"Invalid mass value: {mass}")
-
-        # Try to get density from Material
-        density_kg_m3 = get_material_density(fc_part)
-        
-        if density_kg_m3 is not None and volume is not None:
+        mass_val = None
+        if mass is not None:
             try:
-                vol_val = float(volume)
-                # mass = volume (in mm³) * 1e-9 (to m³) * density (in kg/m³)
-                mass_val = vol_val * 1e-9 * density_kg_m3
+                mass_val = float(mass)
             except (TypeError, ValueError):
                 pass
-        elif volume is not None:
-            # Fallback to mass == volume check (unconfigured density heuristic)
-            try:
-                vol_val = float(volume)
-                if vol_val > 0 and abs(mass_val - vol_val) / vol_val < 1e-4:
-                    mass_val *= 1e-6
-            except (TypeError, ValueError):
-                pass
+
+        if mass_val is None:
+            if volume is not None:
+                try:
+                    vol_val = float(volume)
+                    density_kg_m3 = get_material_density(fc_part)
+                    if density_kg_m3 is None:
+                        density_kg_m3 = 1000.0
+                    mass_val = vol_val * 1e-9 * density_kg_m3
+                except (TypeError, ValueError):
+                    mass_val = 1.0
+            else:
+                mass_val = 1.0
+        else:
+            # Try to get density from Material
+            density_kg_m3 = get_material_density(fc_part)
+            
+            if density_kg_m3 is not None and volume is not None:
+                try:
+                    vol_val = float(volume)
+                    # mass = volume (in mm³) * 1e-9 (to m³) * density (in kg/m³)
+                    mass_val = vol_val * 1e-9 * density_kg_m3
+                except (TypeError, ValueError):
+                    pass
+            elif volume is not None:
+                # Fallback to mass == volume check (unconfigured density heuristic)
+                try:
+                    vol_val = float(volume)
+                    if vol_val > 0 and abs(mass_val - vol_val) / vol_val < 1e-4:
+                        mass_val *= 1e-6
+                except (TypeError, ValueError):
+                    pass
+
+        if mass_val <= 0.0:
+            mass_val = 1e-4
 
         com_vec = WbVec3()
         if com is not None:

@@ -11,27 +11,30 @@ physics Physics {
 
 {% macro bounding_block(b) %}
 {% if b.kind.value == "box" %}
-boundingObject Transform {
+boundingObject Pose {
   translation {{ b.local_offset.x }} {{ b.local_offset.y }} {{ b.local_offset.z }}
   children [
-    Box {
-      size {{ b.size.x }} {{ b.size.y }} {{ b.size.z }}
+    Shape {
+      geometry Box {
+        size {{ b.size.x }} {{ b.size.y }} {{ b.size.z }}
+      }
     }
   ]
 }
 {% elif b.kind.value == "cylinder" %}
-boundingObject Transform {
+boundingObject Pose {
   translation {{ b.local_offset.x }} {{ b.local_offset.y }} {{ b.local_offset.z }}
   children [
-    Cylinder {
-      radius {{ b.radius }}
-      height {{ b.height }}
+    Shape {
+      geometry Cylinder {
+        radius {{ b.radius }}
+        height {{ b.height }}
+      }
     }
   ]
 }
 {% elif b.kind.value == "mesh" %}
-boundingObject Transform {
-  scale 0.001 0.001 0.001
+boundingObject Pose {
   children [
     Shape {
       geometry Mesh {
@@ -45,7 +48,6 @@ boundingObject Transform {
 
 {% macro shape_block(geo) %}
 Transform {
-  scale 0.001 0.001 0.001
   children [
     Shape {
       castShadows FALSE
