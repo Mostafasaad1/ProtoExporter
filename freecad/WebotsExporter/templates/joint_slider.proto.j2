@@ -9,6 +9,7 @@ SliderJoint {
     {% if joint.actuated %}
     LinearMotor {
       name "{{ joint.name }}_motor"
+      maxForce 100000
     }
     {% endif %}
     {% if joint.sensed %}

@@ -10,6 +10,7 @@ HingeJoint {
     {% if joint.actuated %}
     RotationalMotor {
       name "{{ joint.name }}_motor"
+      maxTorque 10000
     }
     {% endif %}
     {% if joint.sensed %}
