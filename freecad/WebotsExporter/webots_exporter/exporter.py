@@ -158,6 +158,11 @@ class WebotsExporter:
     def _write_test_controller(self, diag: list[str]) -> None:
         controller_name = f"{self.world_name}_controller"
         project_dir = self.output_dir.parent
+        if project_dir.name == "protos":
+            project_dir = project_dir.parent
+        elif self.output_dir.name == "protos":
+            project_dir = self.output_dir.parent
+            
         controllers_dir = project_dir / "controllers"
         controller_dir = controllers_dir / controller_name
         

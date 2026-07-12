@@ -177,15 +177,18 @@ class ExportTaskPanel:
         import FreeCADGui
         selection = FreeCADGui.Selection.getSelection()
         has_assembly_sel = False
+        target_assembly = None
         for obj in selection:
             if obj.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
                 has_assembly_sel = True
+                target_assembly = obj
                 break
             curr = obj
             while hasattr(curr, "getParentGroup") and curr.getParentGroup() is not None:
                 parent = curr.getParentGroup()
                 if parent.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
                     has_assembly_sel = True
+                    target_assembly = parent
                     break
                 curr = parent
             if has_assembly_sel:
@@ -198,6 +201,7 @@ class ExportTaskPanel:
                 for obj in doc.Objects:
                     if obj.TypeId in ("Assembly::Assembly", "Assembly::AssemblyObject"):
                         has_any_assembly = True
+                        target_assembly = obj
                         break
             if not has_any_assembly:
                 QtWidgets.QMessageBox.critical(
@@ -249,12 +253,22 @@ class ExportTaskPanel:
                 elif hasattr(joint, "Sensed"):
                     joint.Sensed = sens_val
 
-        from ..exporter import WebotsExporter
+        from ..exporter import WebotsExporter, sanitize_name
         from pathlib import Path
         
-        output_dir = Path(directory)
+        world_name = "assembly_export"
+        if target_assembly is not None:
+            raw_name = getattr(target_assembly, "Label", getattr(target_assembly, "Name", "assembly_export"))
+            world_name = sanitize_name(raw_name)
+        
+        output_dir = Path(directory) / world_name
+        
+        # Ensure the directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
+
         exporter = WebotsExporter(
             output_dir=output_dir,
+            world_name=world_name,
             collision_strategy=strategy,
         )
         try:
