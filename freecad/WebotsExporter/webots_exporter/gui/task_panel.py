@@ -9,9 +9,10 @@ COLLISION_OPTIONS = ["Auto", "Primitives Only", "Decimated Mesh Only", "Convex H
 
 
 class ExportOptions:
-    def __init__(self, output_dir: str = "", collision_strategy: str = "Auto"):
+    def __init__(self, output_dir: str = "", collision_strategy: str = "Auto", visual_quality_pct: float = 50.0):
         self.output_dir = output_dir
         self.collision_strategy = collision_strategy
+        self.visual_quality_pct = visual_quality_pct
 
 
 class ExportWorker(QtCore.QThread):
@@ -53,6 +54,18 @@ class ExportTaskPanel:
         layout.addWidget(QtWidgets.QLabel("Collision Strategy:"))
         layout.addWidget(self._collision_combo)
 
+        # Visual quality slider selection
+        layout.addWidget(QtWidgets.QLabel("Mesh Visual Quality:"))
+        self._quality_layout = QtWidgets.QHBoxLayout()
+        self._quality_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self._quality_slider.setRange(1, 100)
+        self._quality_slider.setValue(50)
+        self._quality_label = QtWidgets.QLabel("Visual Quality: 50%")
+        self._quality_layout.addWidget(self._quality_slider)
+        self._quality_layout.addWidget(self._quality_label)
+        layout.addLayout(self._quality_layout)
+        self._quality_slider.valueChanged.connect(self._on_quality_changed)
+
         # Joint motors & sensors mapping section
         layout.addWidget(QtWidgets.QLabel("Joint Motors & Sensors Configuration:"))
         
@@ -82,6 +95,9 @@ class ExportTaskPanel:
         self._btn_all_sensed.clicked.connect(self._select_all_sensed)
         self.options = ExportOptions()
         self._joints = []
+
+    def _on_quality_changed(self, value: int) -> None:
+        self._quality_label.setText(f"Visual Quality: {value}%")
         
         # Populate joint table
         self._populate_joints()
@@ -266,10 +282,13 @@ class ExportTaskPanel:
         # Ensure the directory exists
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        quality_pct = self._quality_slider.value()
+
         exporter = WebotsExporter(
             output_dir=output_dir,
             world_name=world_name,
             collision_strategy=strategy,
+            visual_quality_pct=float(quality_pct),
         )
         try:
             doc = FreeCAD.ActiveDocument

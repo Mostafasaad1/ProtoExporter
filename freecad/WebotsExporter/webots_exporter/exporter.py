@@ -41,11 +41,16 @@ class WebotsExporter:
         output_dir: Path,
         world_name: str = "assembly_export",
         collision_strategy: CollisionStrategy = "auto",
+        visual_quality_pct: float = 50.0,
     ):
         self.output_dir = output_dir
         self.world_name = world_name
         self.collision_strategy = collision_strategy
+        self.visual_quality_pct = visual_quality_pct
         self.renderer = WbtRenderer()
+        
+        from .mesh_export import quality_to_deflection
+        self.linear_deflection, self.angular_deflection = quality_to_deflection(self.visual_quality_pct)
 
     def run(self, fc_document: Any) -> Path:
         try:
@@ -306,7 +311,13 @@ class WebotsExporter:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 color, transparency = self._resolve_appearance(part, node)
                 try:
-                    export_obj(part, obj_path, color=color)
+                    export_obj(
+                        part,
+                        obj_path,
+                        color=color,
+                        linear_deflection=self.linear_deflection,
+                        angular_deflection=self.angular_deflection,
+                    )
                     diag.append(f"  Node={node.name}: exported via export_obj successfully")
                 except Exception as e:
                     diag.append(f"  Node={node.name}: export_obj failed: {e}")
@@ -343,7 +354,13 @@ class WebotsExporter:
                 obj_path = meshes_dir / f"{node.name}.obj"
                 color, transparency = self._resolve_appearance(part, node)
                 try:
-                    export_obj(part, obj_path, color=color)
+                    export_obj(
+                        part,
+                        obj_path,
+                        color=color,
+                        linear_deflection=self.linear_deflection,
+                        angular_deflection=self.angular_deflection,
+                    )
                 except Exception:
                     pass
                 if not node.geometries:

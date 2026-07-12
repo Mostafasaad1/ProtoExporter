@@ -102,6 +102,8 @@ def export_obj(
     fc_part: Any,
     output_path: Path,
     color: Optional[tuple[float, float, float]] = None,
+    linear_deflection: float = 0.02,
+    angular_deflection: float = 0.1,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     vertices: list[tuple[float, float, float]] = []
@@ -136,8 +138,8 @@ def export_obj(
     if mesh is None and fc_shape is not None:
         try:
             import MeshPart
-            # Use balanced deflection for high visual quality without excessive size
-            mesh = MeshPart.meshFromShape(Shape=fc_shape, LinearDeflection=0.02, AngularDeflection=0.1)
+            # Use specified deflection values
+            mesh = MeshPart.meshFromShape(Shape=fc_shape, LinearDeflection=linear_deflection, AngularDeflection=angular_deflection)
         except Exception:
             pass
 
@@ -272,3 +274,31 @@ def _write_fallback_stl(mesh: Any, output_path: Path) -> None:
                 f.write(f"    endloop\n")
                 f.write(f"  endfacet\n")
         f.write("endsolid collision\n")
+
+
+def quality_to_deflection(quality_pct: float) -> tuple[float, float]:
+    q = max(1.0, min(100.0, float(quality_pct)))
+    # We define key points mapping percentage quality to LinearDeflection and AngularDeflection.
+    # 100% -> Linear=0.005, Angular=0.02  (Highest quality)
+    # 70%  -> Linear=0.01,  Angular=0.05  (Very high quality)
+    # 50%  -> Linear=0.02,  Angular=0.1   (Balanced quality)
+    # 30%  -> Linear=0.05,  Angular=0.15  (Original default quality)
+    # 10%  -> Linear=0.15,  Angular=0.35  (Low quality)
+    # 1%   -> Linear=0.5,   Angular=1.0   (Coarse quality)
+    points = [
+        (1.0,   0.5,   1.0),
+        (10.0,  0.15,  0.35),
+        (30.0,  0.05,  0.15),
+        (50.0,  0.02,  0.1),
+        (70.0,  0.01,  0.05),
+        (100.0, 0.005, 0.02)
+    ]
+    for i in range(len(points) - 1):
+        q1, l1, a1 = points[i]
+        q2, l2, a2 = points[i+1]
+        if q1 <= q <= q2:
+            t = (q - q1) / (q2 - q1)
+            l = l1 + t * (l2 - l1)
+            a = a1 + t * (a2 - a1)
+            return l, a
+    return 0.02, 0.1
