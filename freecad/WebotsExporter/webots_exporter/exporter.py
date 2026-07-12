@@ -8,7 +8,13 @@ from .physics import PhysicsCalculator
 from .joint_introspect import dump_joint_properties
 from .fixed_contractor import FixedJointContractor
 from .collision_fit import fit_bounding_object, compute_convex_hull_mesh, is_poor_primitive_fit
-from .mesh_export import export_obj, export_collision_stl, get_outer_shell_shape
+from .mesh_export import (
+    export_obj,
+    export_collision_stl,
+    get_outer_shell_shape,
+    find_shell_part,
+    get_transformed_shell_shape,
+)
 from .render import WbtRenderer
 from .exceptions import ExporterError
 
@@ -542,10 +548,30 @@ class WebotsExporter:
         for part in parts:
             p_name = getattr(part, "Label", "")
             if p_name in fc_labels:
-                shape = getattr(part, "Shape", None)
+                shell_part = find_shell_part(part)
+                use_fallback = True
+                shape = None
+                
+                if shell_part is not None:
+                    shell_shape = getattr(shell_part, "Shape", None)
+                    if shell_shape is not None and hasattr(shell_shape, "Faces") and len(shell_shape.Faces) > 0:
+                        shape = get_transformed_shell_shape(part, shell_part)
+                        use_fallback = False
+                    else:
+                        msg = f"[ProtoExporter] WARNING: Shell part '{getattr(shell_part, 'Label', '')}' is invalid, empty, or has no faces. Falling back to default shape."
+                        print(msg)
+                        try:
+                            import FreeCAD
+                            FreeCAD.Console.PrintWarning(msg + "\n")
+                        except ImportError:
+                            pass
+
+                if use_fallback:
+                    shape = getattr(part, "Shape", None)
+                    if shape is not None:
+                        shape = get_outer_shell_shape(shape)
+                        
                 if shape is not None:
-                    # Apply outer shell logic for convex hull & decimation performance
-                    shape = get_outer_shell_shape(shape)
                     # Get vertices via TopoShape.tessellate
                     try:
                         vertices_list, _ = shape.tessellate(0.1)
