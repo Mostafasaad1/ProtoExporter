@@ -95,12 +95,12 @@ class ExportTaskPanel:
         self._btn_all_sensed.clicked.connect(self._select_all_sensed)
         self.options = ExportOptions()
         self._joints = []
-
-    def _on_quality_changed(self, value: int) -> None:
-        self._quality_label.setText(f"Visual Quality: {value}%")
         
         # Populate joint table
         self._populate_joints()
+
+    def _on_quality_changed(self, value: int) -> None:
+        self._quality_label.setText(f"Visual Quality: {value}%")
 
     def _populate_joints(self) -> None:
         import FreeCAD
