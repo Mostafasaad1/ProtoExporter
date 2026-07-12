@@ -30,19 +30,24 @@ def dump_joint_properties(fc_joint: Any) -> dict[str, Any]:
         raise JointParsingError(f"Unsupported joint type: {fc_type or type(fc_joint)}")
 
     ref1 = getattr(fc_joint, "Reference1", None)
+    ref2 = getattr(fc_joint, "Reference2", None)
     placement1 = getattr(fc_joint, "Placement1", None)
-    
+    placement2 = getattr(fc_joint, "Placement2", None)
+
     anchor = WbVec3()
-    axis = WbVec3(0, 0, 1) # Default axis is Z-axis
+    axis = WbVec3(0, 0, 1)  # Default axis is Z-axis
 
     if ref1 and isinstance(ref1, (list, tuple)) and len(ref1) > 0 and placement1 is not None:
         part = ref1[0]
         if hasattr(part, "Placement"):
             try:
+                # Compute the joint connector's world-space placement.
+                # All Webots Solids have translation=0, so the world frame IS the
+                # parent Solid's frame.  World-space anchor/axis is therefore correct.
                 global_placement = part.Placement.multiply(placement1)
                 pos = global_placement.Base
                 anchor = WbVec3.from_mm(pos.x, pos.y, pos.z)
-                
+
                 import FreeCAD
                 local_z = FreeCAD.Vector(0, 0, 1)
                 global_z = global_placement.Rotation.multVec(local_z)

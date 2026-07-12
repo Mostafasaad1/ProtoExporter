@@ -43,7 +43,7 @@ class AssemblyGraphParser:
         self.undirected_adjacency[child].add(parent)
         self.edge_types[(parent, child)] = joint_type
         self.edge_types[(child, parent)] = joint_type
-        
+
         props = {
             "joint_type": joint_type,
             "anchor": anchor,
@@ -57,7 +57,8 @@ class AssemblyGraphParser:
     def infer_root(self, fixed_parts: Optional[list[str]] = None) -> str:
         if not self._part_names:
             raise MissingRootError("No parts in assembly graph")
-            
+
+        # Explicit grounded parts take highest priority.
         if fixed_parts:
             for fixed in fixed_parts:
                 if fixed in self._part_names:
@@ -65,45 +66,40 @@ class AssemblyGraphParser:
 
         if len(self._part_names) == 1:
             return self._part_names[0]
-            
+
+        # Sanity: every part must have at least one connection.
         for n in self._part_names:
-            has_connections = False
-            if n in self.adjacency and self.adjacency[n]:
-                has_connections = True
-            else:
-                for parent, children in self.adjacency.items():
-                    if n in children:
-                        has_connections = True
-                        break
-            if not has_connections:
+            if n not in self.undirected_adjacency or not self.undirected_adjacency[n]:
                 raise MissingRootError(
                     f"Part '{n}' has no connections; cannot infer root"
                 )
 
-        in_degrees = {n: 0 for n in self._part_names}
-        for parent, children in self.adjacency.items():
-            for child in children:
-                if child in in_degrees:
-                    in_degrees[child] += 1
-                    
-        roots = [n for n, in_deg in in_degrees.items() if in_deg == 0]
-        if len(roots) == 1:
-            return roots[0]
-        if len(roots) > 1:
-            out_degrees = {n: len(self.adjacency.get(n, set())) for n in roots}
-            return max(roots, key=lambda n: out_degrees[n])
-            
-        total_degrees = {}
-        for n in self._part_names:
-            out_deg = len(self.adjacency.get(n, set()))
-            in_deg = in_degrees.get(n, 0)
-            total_degrees[n] = out_deg + in_deg
-            
-        min_deg = min(total_degrees.values())
-        candidates = [n for n, d in total_degrees.items() if d == min_deg]
-        if candidates:
-            return candidates[0]
-        raise MissingRootError("No root candidate found in graph")
+        # FreeCAD joints have no guaranteed Reference1=parent / Reference2=child
+        # ordering — a link can appear as Reference1 in multiple joints yet still
+        # not be the root.  The directed in-degree approach is therefore
+        # fundamentally unreliable and is not used here.
+        #
+        # Reliable heuristic: in a kinematic chain the base is always a leaf
+        # (undirected degree = 1).  The assembly group traversal visits the base
+        # link first, so among all leaves we pick the one with the lowest index
+        # in the collection order.
+        undirected_degrees = {
+            n: len(self.undirected_adjacency.get(n, set()))
+            for n in self._part_names
+        }
+        order = {name: i for i, name in enumerate(self._part_names)}
+        leaves = [n for n, d in undirected_degrees.items() if d == 1]
+
+        if leaves:
+            return min(leaves, key=lambda n: order[n])
+
+        # No leaves (fully-connected or cycle): pick the node with the fewest
+        # undirected connections, breaking ties by collection order.
+        min_deg = min(undirected_degrees.values())
+        candidates = [n for n, d in undirected_degrees.items() if d == min_deg]
+        return min(candidates, key=lambda n: order[n])
+
+
 
     def graph_density(self) -> float:
         n = len(self._part_names)
