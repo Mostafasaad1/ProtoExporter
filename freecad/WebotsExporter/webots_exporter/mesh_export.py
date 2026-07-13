@@ -2,6 +2,110 @@ from pathlib import Path
 from typing import Any, Optional
 
 
+def get_mesh_deflection(fallback: float = 0.02) -> float:
+    """Read the mesh deflection setting from FreeCAD's user preferences.
+    
+    Checks Part MeshDeviation first, then Mesh Deflection, and falls back to the
+    provided fallback value if neither is defined or valid.
+    """
+    try:
+        import FreeCAD
+        part_prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Part")
+        if part_prefs:
+            deviation = part_prefs.GetFloat("MeshDeviation", 0.0)
+            if deviation > 0.0:
+                return deviation
+        
+        mesh_prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Mesh")
+        if mesh_prefs:
+            deflection = mesh_prefs.GetFloat("Deflection", 0.0)
+            if deflection > 0.0:
+                return deflection
+    except Exception:
+        pass
+    return fallback
+
+
+def round_color(color: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Round RGB color components to 3 decimal places to ensure consistent grouping key."""
+    return (round(color[0], 3), round(color[1], 3), round(color[2], 3))
+
+
+def generate_material_name(color: tuple[float, float, float]) -> str:
+    """Generate a unique material name based on the rounded RGB color components."""
+    r, g, b = round_color(color)
+    return f"material_{r:.3f}_{g:.3f}_{b:.3f}"
+
+
+def get_face_color(fc_part: Any, face_index: int, default_color: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Extract the diffuse color for a specific face of the FreeCAD part.
+    
+    Falls back to the part's general default color if DiffuseColor is not defined
+    or is out of bounds for the face.
+    """
+    try:
+        # Check part.ViewObject.DiffuseColor first
+        if hasattr(fc_part, "ViewObject") and fc_part.ViewObject is not None:
+            diffuse_colors = getattr(fc_part.ViewObject, "DiffuseColor", None)
+            if diffuse_colors and isinstance(diffuse_colors, (list, tuple)):
+                if face_index < len(diffuse_colors):
+                    c = diffuse_colors[face_index]
+                    if hasattr(c, "r") and hasattr(c, "g") and hasattr(c, "b"):
+                        return (float(c.r), float(c.g), float(c.b))
+                    elif isinstance(c, (list, tuple)) and len(c) >= 3:
+                        return (float(c[0]), float(c[1]), float(c[2]))
+        
+        # Check if linked object has it
+        if hasattr(fc_part, "LinkedObject") and fc_part.LinkedObject is not None:
+            linked_vo = getattr(fc_part.LinkedObject, "ViewObject", None)
+            if linked_vo is not None:
+                diffuse_colors = getattr(linked_vo, "DiffuseColor", None)
+                if diffuse_colors and isinstance(diffuse_colors, (list, tuple)):
+                    if face_index < len(diffuse_colors):
+                        c = diffuse_colors[face_index]
+                        if hasattr(c, "r") and hasattr(c, "g") and hasattr(c, "b"):
+                            return (float(c.r), float(c.g), float(c.b))
+                        elif isinstance(c, (list, tuple)) and len(c) >= 3:
+                            return (float(c[0]), float(c[1]), float(c[2]))
+    except Exception:
+        pass
+    return default_color
+
+
+def resolve_part_color(fc_part: Any, passed_color: Optional[tuple[float, float, float]] = None) -> tuple[float, float, float]:
+    """Resolve the general color of the part, using the passed color, ShapeColor,
+    or a default gray if none are available.
+    """
+    if passed_color is not None:
+        return passed_color
+    
+    try:
+        sc = None
+        if hasattr(fc_part, "ViewObject") and fc_part.ViewObject is not None:
+            sc = getattr(fc_part.ViewObject, "ShapeColor", None)
+        if not sc and hasattr(fc_part, "LinkedObject") and fc_part.LinkedObject and hasattr(fc_part.LinkedObject, "ViewObject") and fc_part.LinkedObject.ViewObject:
+            sc = getattr(fc_part.LinkedObject.ViewObject, "ShapeColor", None)
+        
+        if not sc:
+            material = getattr(fc_part, "Material", None)
+            if not material and hasattr(fc_part, "LinkedObject") and fc_part.LinkedObject:
+                material = getattr(fc_part.LinkedObject, "Material", None)
+            if material is not None:
+                for attr in ["Color", "color", "ShapeColor", "diffuseColor"]:
+                    if hasattr(material, attr):
+                        sc = getattr(material, attr)
+                        break
+        
+        if sc is not None:
+            if hasattr(sc, "r") and hasattr(sc, "g") and hasattr(sc, "b"):
+                return (float(sc.r), float(sc.g), float(sc.b))
+            elif isinstance(sc, (list, tuple)) and len(sc) >= 3:
+                return (float(sc[0]), float(sc[1]), float(sc[2]))
+    except Exception:
+        pass
+    return (0.8, 0.8, 0.8)
+
+
 def find_shell_part(fc_part: Any) -> Optional[Any]:
     if fc_part is None:
         return None
@@ -105,6 +209,12 @@ def export_obj(
     linear_deflection: float = 0.02,
     angular_deflection: float = 0.1,
 ) -> None:
+    """Export a FreeCAD part to a Wavefront OBJ and corresponding MTL file.
+    
+    If the part's shape has faces, it uses face-by-face tessellation to support
+    multi-material coloring. Otherwise, it falls back to the default shape mesh
+    export.
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     vertices: list[tuple[float, float, float]] = []
     faces: list[list[int]] = []
@@ -133,6 +243,65 @@ def export_obj(
         
         fc_shape = getattr(actual_part, "Shape", actual_part)
         fc_shape = get_outer_shell_shape(fc_shape)
+
+    deflection = get_mesh_deflection(linear_deflection)
+    has_faces = False
+    if fc_shape is not None and hasattr(fc_shape, "Faces") and isinstance(fc_shape.Faces, (list, tuple)) and len(fc_shape.Faces) > 0:
+        has_faces = True
+
+    if has_faces:
+        def_color = resolve_part_color(fc_part, color)
+        global_vertices = []
+        grouped_faces = {}
+        for face_idx, face in enumerate(fc_shape.Faces):
+            face_color = get_face_color(fc_part, face_idx, def_color)
+            rounded_rgb = round_color(face_color)
+            if rounded_rgb not in grouped_faces:
+                grouped_faces[rounded_rgb] = []
+            try:
+                verts, tris = face.tessellate(deflection)
+            except Exception as e:
+                print(f"[ProtoExporter] Face tessellation failed for face {face_idx}: {e}")
+                continue
+            global_vertex_count = len(global_vertices)
+            for v in verts:
+                global_vertices.append((v.x * 0.001, v.y * 0.001, v.z * 0.001))
+            for tri in tris:
+                global_tri = [global_vertex_count + int(idx) + 1 for idx in tri]
+                grouped_faces[rounded_rgb].append(global_tri)
+        if len(global_vertices) > 0:
+            mtl_path = output_path.with_suffix(".mtl")
+            transparency = 0.0
+            try:
+                transp = None
+                if hasattr(fc_part, "ViewObject") and fc_part.ViewObject is not None:
+                    transp = getattr(fc_part.ViewObject, "Transparency", None)
+                if transp is None and hasattr(fc_part, "LinkedObject") and fc_part.LinkedObject and hasattr(fc_part.LinkedObject, "ViewObject") and fc_part.LinkedObject.ViewObject:
+                    transp = getattr(fc_part.LinkedObject.ViewObject, "Transparency", None)
+                if transp is not None:
+                    transparency = float(transp) / 100.0
+            except Exception:
+                pass
+
+            with open(mtl_path, "w") as f:
+                for rounded_rgb in sorted(grouped_faces.keys()):
+                    mat_name = generate_material_name(rounded_rgb)
+                    r, g, b = rounded_rgb
+                    f.write(f"newmtl {mat_name}\n")
+                    f.write(f"Kd {r} {g} {b}\n")
+                    if transparency > 0.0:
+                        f.write(f"d {1.0 - transparency:.4f}\n")
+                    f.write("illum 1\n")
+            with open(output_path, "w") as f:
+                f.write(f"mtllib {mtl_path.name}\n")
+                for v in global_vertices:
+                    f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
+                for rounded_rgb in sorted(grouped_faces.keys()):
+                    mat_name = generate_material_name(rounded_rgb)
+                    f.write(f"usemtl {mat_name}\n")
+                    for tri in grouped_faces[rounded_rgb]:
+                        f.write(f"f {' '.join(str(idx) for idx in tri)}\n")
+            return
 
     mesh = getattr(fc_shape, "Mesh", None)
     if mesh is None and fc_shape is not None:
@@ -165,9 +334,23 @@ def export_obj(
 
         r, g, b = color or (0.8, 0.8, 0.8)
 
+        transparency = 0.0
+        try:
+            transp = None
+            if hasattr(fc_part, "ViewObject") and fc_part.ViewObject is not None:
+                transp = getattr(fc_part.ViewObject, "Transparency", None)
+            if transp is None and hasattr(fc_part, "LinkedObject") and fc_part.LinkedObject and hasattr(fc_part.LinkedObject, "ViewObject") and fc_part.LinkedObject.ViewObject:
+                transp = getattr(fc_part.LinkedObject.ViewObject, "Transparency", None)
+            if transp is not None:
+                transparency = float(transp) / 100.0
+        except Exception:
+            pass
+
         with open(mtl_path, "w") as f:
             f.write(f"newmtl material_{obj_name}\n")
             f.write(f"Kd {r} {g} {b}\n")
+            if transparency > 0.0:
+                f.write(f"d {1.0 - transparency:.4f}\n")
             f.write("illum 1\n")
 
         # Read temp file, scale vertices, insert mtllib/usemtl, and write output

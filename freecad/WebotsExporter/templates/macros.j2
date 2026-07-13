@@ -51,12 +51,6 @@ Transform {
   children [
     Shape {
       castShadows FALSE
-      appearance Appearance {
-        material Material {
-          diffuseColor {{ geo.appearance.diffuse_color[0] }} {{ geo.appearance.diffuse_color[1] }} {{ geo.appearance.diffuse_color[2] }}
-          transparency {{ geo.appearance.transparency }}
-        }
-      }
       geometry Mesh {
         url [ "{{ geo.obj_relpath }}" ]
       }
