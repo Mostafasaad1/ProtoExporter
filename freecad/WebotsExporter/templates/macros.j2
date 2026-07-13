@@ -49,11 +49,9 @@ boundingObject Pose {
 {% macro shape_block(geo) %}
 Transform {
   children [
-    Shape {
+    CadShape {
+      url [ "{{ geo.obj_relpath }}" ]
       castShadows FALSE
-      geometry Mesh {
-        url [ "{{ geo.obj_relpath }}" ]
-      }
     }
   ]
 }
