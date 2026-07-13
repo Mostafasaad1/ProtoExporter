@@ -314,7 +314,6 @@ class WebotsExporter:
                     export_obj(
                         part,
                         obj_path,
-                        color=color,
                         linear_deflection=self.linear_deflection,
                         angular_deflection=self.angular_deflection,
                     )
@@ -357,7 +356,6 @@ class WebotsExporter:
                     export_obj(
                         part,
                         obj_path,
-                        color=color,
                         linear_deflection=self.linear_deflection,
                         angular_deflection=self.angular_deflection,
                     )
