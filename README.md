@@ -1,32 +1,36 @@
 # FreeCAD Webots Exporter Addon
 
-An addon for FreeCAD 1.0+ to export native assemblies into Webots simulation files (`.wbt` / `.proto`). It preserves kinematic tree hierarchies, transforms, shapes, and materials, and supports auto-generating simulation-ready controller stubs for various automation and robotic protocols.
+The FreeCAD Webots Exporter is a professional engineering integration tool designed to bridge the gap between computer-aided design (CAD) in FreeCAD 1.0+ and robot simulation in Webots. It automates the transition of native assembly models into fully-articulated, simulation-ready Webots PROTO nodes, preserving complex kinematics, physical properties, and high-fidelity materials.
 
-## Features
+By automating kinematics extraction, mesh optimization, and communication interface generation, this tool eliminates manual rebuilding of CAD assemblies in simulation editors, reducing model setup times from days to minutes.
 
-- **Assembly-to-World/Proto Export**: Converts FreeCAD assemblies and sub-assemblies into physical Webots nodes.
-- **Spatial Transforms**: Preserves relative translation and rotation between parts, aligns axes, and converts scale from millimeters to meters.
-- **Visual & Collision Geometry**: Exports shapes to OBJ format, decimes meshes based on configurable deflection/quality settings, and generates optimized primitive or convex-hull bounds.
-- **Multi-Material Support**: Retains diffuse colors, transparencies, and textures utilizing MTL files.
-- **Controller Protocol Export**: Generates functional Python controller stubs mapping assembly joints to interfaces.
+## Core Capabilities
 
-## Supported Protocols
+- **Assembly-to-PROTO Translation**: Converts hierarchical FreeCAD assemblies and sub-assemblies into native Webots Solid and Joint PROTO structures.
+- **Hierarchical Kinematics Introspection**: Automatically constructs Webots joint trees from FreeCAD constraints, resolving complex parent-child links, rotational limits, and anchor points.
+- **Intelligent Mesh Processing**: Exports visual shapes to OBJ/MTL formats, applies configurable decimation to optimize mesh complexity, and constructs corresponding bounding volumes (primitives or convex hulls) for physical collisions.
+- **Multi-Material Fidelity**: Preserves original CAD appearance details, including diffuse colors, transparencies, and texture references directly into Webots appearance definitions.
+- **Automated Controller Interfaces**: Generates self-contained python controller stubs for instant connection to standard middleware and automation systems.
 
-| Protocol | Output Files | Dependencies | Default Connection / Settings |
+## Supported Controller Protocols
+
+For downstream control, the exporter generates interface stubs alongside the PROTO definition:
+
+| Protocol | Generated Assets | Dependencies | Description |
 |---|---|---|---|
-| **TCP Socket** | `<robot>_ctrl.py` | None | `127.0.0.1:5005` (JSON commands & telemetry) |
-| **ROS 2** | `<robot>_ctrl.py`, `<robot>.urdf` | `rclpy` | Subscribes to `/<robot>/joint_commands` (`sensor_msgs/JointState`) and individual `/<robot>/command/<joint>` (`std_msgs/Float64`) topics. Publishes `/robot_description` parameter/topic and `/<robot>/joint_states` (`sensor_msgs/JointState`). |
-| **Modbus TCP** | `<robot>_ctrl.py`, `register_map.md` | `pymodbus` | `0.0.0.0:502` / User-space port. Target positions mapped to Holding Registers (4xxxx), telemetry to Input Registers (3xxxx), scaled by 1000. |
-| **OPC UA** | `<robot>_ctrl.py`, `mapping.csv` | `asyncua` | `opc.tcp://127.0.0.1:4840`. Subscribes to node IDs mapped in `mapping.csv`. |
-| **Python GUI** | `<robot>_ctrl.py`, `gui_jogger.py` | None | Tkinter-based interactive jogging slider/button panel communicating over TCP. |
+| **TCP Socket** | `<robot>_ctrl.py` | None | Low-latency JSON-based command and telemetry stream over TCP. |
+| **ROS 2** | `<robot>_ctrl.py`, `<robot>.urdf` | `rclpy` | Automatically publishes dynamic `robot_description` and `joint_states` telemetry. Subscribes to standard command topics, enabling out-of-the-box integration with ROS 2 visualization and control nodes. |
+| **Modbus TCP** | `<robot>_ctrl.py`, `register_map.md` | `pymodbus` | Direct mapping of joint telemetry to Modbus Input Registers (3xxxx) and targets to Holding Registers (4xxxx) for PLC integration. |
+| **OPC UA** | `<robot>_ctrl.py`, `mapping.csv` | `asyncua` | Server-client OPC UA variable mapping to monitor and control joints from industrial SCADA systems. |
+| **Python GUI** | `<robot>_ctrl.py`, `gui_jogger.py` | None | Lightweight Tkinter dashboard to manually jog and monitor joint positions. |
 
 ## Installation
 
-1. Copy this repository directory (or symlink it) to your FreeCAD Addon directory:
-   - Linux: `~/.local/share/FreeCAD/Mod/` or inside your Flatpak FreeCAD sandbox directory.
+1. Copy or symlink this directory into your FreeCAD Mod directory:
+   - Linux: `~/.local/share/FreeCAD/Mod/`
 2. Restart FreeCAD.
-3. Open the **Webots Exporter** workbench or use the workbench toolbar to configure your export.
+3. Access the workbench via the Workbench Selector to configure and execute exports.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This software is released under the MIT License. Refer to the LICENSE file for details.
