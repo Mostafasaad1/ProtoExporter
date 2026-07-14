@@ -70,7 +70,7 @@ class ExportTaskPanel:
         layout.addWidget(QtWidgets.QLabel("Controller Protocol:"))
         self._protocol_combo = QtWidgets.QComboBox()
         self._protocol_combo.addItems([
-            "None", "TCP Socket", "MQTT", "ROS 2", "Modbus TCP", "OPC UA Client", "Python GUI"
+            "None", "TCP Socket", "ROS 2", "Modbus TCP", "OPC UA Client", "Python GUI"
         ])
         layout.addWidget(self._protocol_combo)
 
@@ -79,10 +79,6 @@ class ExportTaskPanel:
         self._protocol_config_layout = QtWidgets.QFormLayout(self._protocol_config_widget)
         self._protocol_config_layout.setContentsMargins(0, 5, 0, 5)
         layout.addWidget(self._protocol_config_widget)
-
-        # Pre-create config inputs so they are preserved
-        self._mqtt_broker_input = QtWidgets.QLineEdit("localhost")
-        self._mqtt_port_input = QtWidgets.QLineEdit("1883")
         
         self._modbus_ip_input = QtWidgets.QLineEdit("0.0.0.0")
         self._modbus_port_input = QtWidgets.QLineEdit("502")
@@ -156,11 +152,7 @@ class ExportTaskPanel:
         self._warning_label.setText("")
 
         protocol_name = self._protocol_combo.currentText()
-        if protocol_name == "MQTT":
-            self._protocol_config_layout.addRow("MQTT Broker IP/Host:", self._mqtt_broker_input)
-            self._protocol_config_layout.addRow("MQTT Broker Port:", self._mqtt_port_input)
-            self._protocol_config_widget.show()
-        elif protocol_name == "Modbus TCP":
+        if protocol_name == "Modbus TCP":
             self._protocol_config_layout.addRow("Modbus Bind IP:", self._modbus_ip_input)
             self._protocol_config_layout.addRow("Modbus Bind Port:", self._modbus_port_input)
             self._protocol_config_widget.show()
@@ -406,7 +398,6 @@ class ExportTaskPanel:
         protocol_map = {
             "None": ControllerProtocol.NONE,
             "TCP Socket": ControllerProtocol.TCP_SOCKET,
-            "MQTT": ControllerProtocol.MQTT,
             "ROS 2": ControllerProtocol.ROS2,
             "Modbus TCP": ControllerProtocol.MODBUS_TCP,
             "OPC UA Client": ControllerProtocol.OPC_UA,
@@ -415,12 +406,6 @@ class ExportTaskPanel:
         protocol = protocol_map.get(protocol_str, ControllerProtocol.NONE)
         
         # Build ProtocolConfig
-        mqtt_port = 1883
-        try:
-            mqtt_port = int(self._mqtt_port_input.text().strip())
-        except ValueError:
-            pass
-            
         modbus_port = 502
         try:
             modbus_port = int(self._modbus_port_input.text().strip())
@@ -429,8 +414,6 @@ class ExportTaskPanel:
             
         protocol_config = ProtocolConfig(
             protocol=protocol,
-            mqtt_broker=self._mqtt_broker_input.text().strip(),
-            mqtt_port=mqtt_port,
             modbus_ip=self._modbus_ip_input.text().strip(),
             modbus_port=modbus_port,
             opcua_server=self._opcua_server_input.text().strip(),

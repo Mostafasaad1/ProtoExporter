@@ -699,7 +699,6 @@ class WebotsExporter:
     def _get_protocol_writer(self, protocol: ControllerProtocol) -> Optional[Any]:
         from .protocols.base import BaseProtocolWriter
         from .protocols.tcp import TCPProtocolWriter
-        from .protocols.mqtt import MQTTProtocolWriter
         from .protocols.ros2 import ROS2ProtocolWriter
         from .protocols.modbus import ModbusProtocolWriter
         from .protocols.opcua import OPCUAProtocolWriter
@@ -707,7 +706,6 @@ class WebotsExporter:
         
         writers = {
             ControllerProtocol.TCP_SOCKET: TCPProtocolWriter,
-            ControllerProtocol.MQTT: MQTTProtocolWriter,
             ControllerProtocol.ROS2: ROS2ProtocolWriter,
             ControllerProtocol.MODBUS_TCP: ModbusProtocolWriter,
             ControllerProtocol.OPC_UA: OPCUAProtocolWriter,

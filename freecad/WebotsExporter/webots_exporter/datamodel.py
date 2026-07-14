@@ -109,7 +109,6 @@ class WbSolidNode:
 class ControllerProtocol(Enum):
     NONE = "None"
     TCP_SOCKET = "TCP Socket"
-    MQTT = "MQTT"
     ROS2 = "ROS 2"
     MODBUS_TCP = "Modbus TCP"
     OPC_UA = "OPC UA Client"
@@ -119,8 +118,6 @@ class ControllerProtocol(Enum):
 @dataclass
 class ProtocolConfig:
     protocol: ControllerProtocol = ControllerProtocol.NONE
-    mqtt_broker: str = "localhost"
-    mqtt_port: int = 1883
     modbus_ip: str = "0.0.0.0"
     modbus_port: int = 502
     opcua_server: str = "opc.tcp://127.0.0.1:4840"
