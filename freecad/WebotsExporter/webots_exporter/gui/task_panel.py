@@ -66,6 +66,48 @@ class ExportTaskPanel:
         layout.addLayout(self._quality_layout)
         self._quality_slider.valueChanged.connect(self._on_quality_changed)
 
+        # Controller Protocol selection
+        layout.addWidget(QtWidgets.QLabel("Controller Protocol:"))
+        self._protocol_combo = QtWidgets.QComboBox()
+        self._protocol_combo.addItems([
+            "None", "TCP Socket", "MQTT", "ROS 2", "Modbus TCP", "OPC UA Client", "Python GUI"
+        ])
+        layout.addWidget(self._protocol_combo)
+
+        # Container for protocol specific configs
+        self._protocol_config_widget = QtWidgets.QWidget()
+        self._protocol_config_layout = QtWidgets.QFormLayout(self._protocol_config_widget)
+        self._protocol_config_layout.setContentsMargins(0, 5, 0, 5)
+        layout.addWidget(self._protocol_config_widget)
+
+        # Pre-create config inputs so they are preserved
+        self._mqtt_broker_input = QtWidgets.QLineEdit("localhost")
+        self._mqtt_port_input = QtWidgets.QLineEdit("1883")
+        
+        self._modbus_ip_input = QtWidgets.QLineEdit("0.0.0.0")
+        self._modbus_port_input = QtWidgets.QLineEdit("502")
+
+        self._opcua_server_input = QtWidgets.QLineEdit("opc.tcp://127.0.0.1:4840")
+        self._opcua_csv_path = QtWidgets.QLineEdit("")
+        self._opcua_csv_btn = QtWidgets.QPushButton("Browse...")
+        
+        self._opcua_csv_container = QtWidgets.QWidget()
+        opcua_csv_lay = QtWidgets.QHBoxLayout(self._opcua_csv_container)
+        opcua_csv_lay.setContentsMargins(0, 0, 0, 0)
+        opcua_csv_lay.addWidget(self._opcua_csv_path)
+        opcua_csv_lay.addWidget(self._opcua_csv_btn)
+
+        self._opcua_csv_btn.clicked.connect(self._on_browse_csv)
+        self._protocol_combo.currentIndexChanged.connect(self._on_protocol_changed)
+        self._protocol_config_widget.hide()
+
+        # Warning label
+        self._warning_label = QtWidgets.QLabel("")
+        self._warning_label.setStyleSheet("color: red;")
+        self._warning_label.setWordWrap(True)
+        self._warning_label.hide()
+        layout.addWidget(self._warning_label)
+
         # Joint motors & sensors mapping section
         layout.addWidget(QtWidgets.QLabel("Joint Motors & Sensors Configuration:"))
         
@@ -101,6 +143,79 @@ class ExportTaskPanel:
 
     def _on_quality_changed(self, value: int) -> None:
         self._quality_label.setText(f"Visual Quality: {value}%")
+
+    def _on_protocol_changed(self, index: int) -> None:
+        # Clear existing rows in QFormLayout
+        while self._protocol_config_layout.count() > 0:
+            item = self._protocol_config_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+        
+        self._warning_label.hide()
+        self._warning_label.setText("")
+
+        protocol_name = self._protocol_combo.currentText()
+        if protocol_name == "MQTT":
+            self._protocol_config_layout.addRow("MQTT Broker IP/Host:", self._mqtt_broker_input)
+            self._protocol_config_layout.addRow("MQTT Broker Port:", self._mqtt_port_input)
+            self._protocol_config_widget.show()
+        elif protocol_name == "Modbus TCP":
+            self._protocol_config_layout.addRow("Modbus Bind IP:", self._modbus_ip_input)
+            self._protocol_config_layout.addRow("Modbus Bind Port:", self._modbus_port_input)
+            self._protocol_config_widget.show()
+        elif protocol_name == "OPC UA Client":
+            self._protocol_config_layout.addRow("OPC UA Server URI:", self._opcua_server_input)
+            self._protocol_config_layout.addRow("OPC UA CSV Node Map:", self._opcua_csv_container)
+            self._protocol_config_widget.show()
+            # If a CSV path is already loaded, re-validate it
+            if self._opcua_csv_path.text():
+                self._validate_csv(self._opcua_csv_path.text())
+        else:
+            self._protocol_config_widget.hide()
+
+    def _on_browse_csv(self) -> None:
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.form, "Select OPC UA CSV Node Map", "", "CSV Files (*.csv)"
+        )
+        if file_path:
+            self._opcua_csv_path.setText(file_path)
+            self._validate_csv(file_path)
+
+    def _validate_csv(self, file_path: str) -> list[str]:
+        import csv
+        warnings = []
+        if not file_path or not Path(file_path).exists():
+            return warnings
+        
+        # Get active joints list
+        joint_labels = [getattr(j, "Label", getattr(j, "Name", "")) for j in self._joints]
+        
+        try:
+            with open(file_path, mode='r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                for row_idx, row in enumerate(reader):
+                    if not row:
+                        continue
+                    if len(row) < 2:
+                        warnings.append(f"Row {row_idx+1}: Invalid row format (must have at least 2 columns).")
+                        continue
+                    node_path = row[0].strip()
+                    joint_name = row[1].strip()
+                    if joint_name not in joint_labels:
+                        warnings.append(f"Row {row_idx+1}: Joint '{joint_name}' not found in the assembly.")
+        except Exception as e:
+            warnings.append(f"Error reading CSV: {e}")
+        
+        if warnings:
+            warning_text = "OPC UA CSV Node Map Warnings:\n" + "\n".join(warnings)
+            self._warning_label.setText(warning_text)
+            self._warning_label.show()
+        else:
+            self._warning_label.setText("")
+            self._warning_label.hide()
+            
+        return warnings
 
     def _populate_joints(self) -> None:
         import FreeCAD
@@ -284,19 +399,77 @@ class ExportTaskPanel:
 
         quality_pct = self._quality_slider.value()
 
+        # Get protocol choice
+        protocol_str = self._protocol_combo.currentText()
+        from ..datamodel import ControllerProtocol, ProtocolConfig
+        
+        protocol_map = {
+            "None": ControllerProtocol.NONE,
+            "TCP Socket": ControllerProtocol.TCP_SOCKET,
+            "MQTT": ControllerProtocol.MQTT,
+            "ROS 2": ControllerProtocol.ROS2,
+            "Modbus TCP": ControllerProtocol.MODBUS_TCP,
+            "OPC UA Client": ControllerProtocol.OPC_UA,
+            "Python GUI": ControllerProtocol.PYTHON_GUI,
+        }
+        protocol = protocol_map.get(protocol_str, ControllerProtocol.NONE)
+        
+        # Build ProtocolConfig
+        mqtt_port = 1883
+        try:
+            mqtt_port = int(self._mqtt_port_input.text().strip())
+        except ValueError:
+            pass
+            
+        modbus_port = 502
+        try:
+            modbus_port = int(self._modbus_port_input.text().strip())
+        except ValueError:
+            pass
+            
+        protocol_config = ProtocolConfig(
+            protocol=protocol,
+            mqtt_broker=self._mqtt_broker_input.text().strip(),
+            mqtt_port=mqtt_port,
+            modbus_ip=self._modbus_ip_input.text().strip(),
+            modbus_port=modbus_port,
+            opcua_server=self._opcua_server_input.text().strip(),
+            opcua_csv_path=self._opcua_csv_path.text().strip()
+        )
+
+        # Run OPC UA CSV validation if selected
+        if protocol == ControllerProtocol.OPC_UA:
+            csv_path = protocol_config.opcua_csv_path
+            if not csv_path:
+                QtWidgets.QMessageBox.warning(
+                    self.form, "Warning", "Please select an OPC UA CSV Node Map file."
+                )
+                return False
+            self._validate_csv(csv_path)
+
         exporter = WebotsExporter(
             output_dir=output_dir,
             world_name=world_name,
             collision_strategy=strategy,
             visual_quality_pct=float(quality_pct),
+            protocol_config=protocol_config,
         )
         try:
             doc = FreeCAD.ActiveDocument
             result = exporter.run(doc)
+            
+            msg = f"Assembly exported to:\n{result}"
+            if protocol != ControllerProtocol.NONE:
+                notice = exporter.get_dependency_notice()
+                if notice:
+                    msg += f"\n\nRequired dependencies:\n{notice}"
+                else:
+                    msg += "\n\nNo extra dependencies required."
+            
             QtWidgets.QMessageBox.information(
                 self.form,
                 "Export Complete",
-                f"Assembly exported to:\n{result}",
+                msg,
             )
             return True
         except Exception as e:

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Optional
 
-from .datamodel import WbSolidNode, WbVec3, WbAxisAngle, WbBoundingObject, BoundingKind
+from .datamodel import WbSolidNode, WbVec3, WbAxisAngle, WbBoundingObject, BoundingKind, WbJointNode, ControllerProtocol, ProtocolConfig
 from .graph_parser import AssemblyGraphParser
 from .tree_builder import KinematicTreeBuilder
 from .physics import PhysicsCalculator
@@ -42,12 +42,14 @@ class WebotsExporter:
         world_name: str = "assembly_export",
         collision_strategy: CollisionStrategy = "auto",
         visual_quality_pct: float = 50.0,
+        protocol_config: Optional[ProtocolConfig] = None,
     ):
         self.output_dir = output_dir
         self.world_name = world_name
         self.collision_strategy = collision_strategy
         self.visual_quality_pct = visual_quality_pct
         self.renderer = WbtRenderer()
+        self.protocol_config = protocol_config or ProtocolConfig()
         
         from .mesh_export import quality_to_deflection
         self.linear_deflection, self.angular_deflection = quality_to_deflection(self.visual_quality_pct)
@@ -146,7 +148,9 @@ class WebotsExporter:
         proto_content = self.renderer.render_proto(self.world_name, root_solid)
         proto_path.write_text(proto_content, encoding="utf-8")
 
-        if self.renderer.has_joints(root_solid):
+        if self.protocol_config.protocol != ControllerProtocol.NONE:
+            self._write_protocol_controller(root_solid, diag_lines)
+        elif self.renderer.has_joints(root_solid):
             self._write_test_controller(diag_lines)
 
         diag_lines.append("")
@@ -647,3 +651,77 @@ class WebotsExporter:
         for joint in node.child_joints:
             if joint.child is not None:
                 self._apply_collision_geometry(joint.child, parts, meshes_dir)
+
+    def _write_protocol_controller(self, root_solid: WbSolidNode, diag: list[str]) -> None:
+        from .datamodel import ControllerProtocol
+        proto = self.protocol_config.protocol
+        
+        # Collect active joints
+        joints = self._collect_all_joints(root_solid)
+        if not joints:
+            import logging
+            logging.warning("Exporting controller but the assembly has no active joints.")
+            diag.append("WARNING: Exporting controller but the assembly has no active joints.")
+            
+        # Import the correct protocol writer
+        writer = self._get_protocol_writer(proto)
+        if writer is None:
+            diag.append(f"  Controller Protocol={proto.value}: no writer found.")
+            return
+            
+        project_dir = self.output_dir.parent
+        if project_dir.name == "protos":
+            project_dir = project_dir.parent
+        elif self.output_dir.name == "protos":
+            project_dir = self.output_dir.parent
+            
+        controllers_dir = project_dir / "controllers"
+        robot_name = self.world_name
+        controller_dir = controllers_dir / f"{robot_name}_ctrl"
+        
+        try:
+            controller_dir.mkdir(parents=True, exist_ok=True)
+            writer.write(str(project_dir), robot_name, joints, self.protocol_config)
+            diag.append(f"  Controller Protocol={proto.value}: generated successfully at {controller_dir}")
+        except Exception as e:
+            diag.append(f"  Controller Protocol={proto.value}: generation failed: {e}")
+            raise e
+
+    def _collect_all_joints(self, node: WbSolidNode) -> list[str]:
+        joints = []
+        for joint in node.child_joints:
+            if joint.name and (joint.actuated or joint.sensed):
+                joints.append(joint.name)
+            if joint.child:
+                joints.extend(self._collect_all_joints(joint.child))
+        return joints
+
+    def _get_protocol_writer(self, protocol: ControllerProtocol) -> Optional[Any]:
+        from .protocols.base import BaseProtocolWriter
+        from .protocols.tcp import TCPProtocolWriter
+        from .protocols.mqtt import MQTTProtocolWriter
+        from .protocols.ros2 import ROS2ProtocolWriter
+        from .protocols.modbus import ModbusProtocolWriter
+        from .protocols.opcua import OPCUAProtocolWriter
+        from .protocols.gui import GUIProtocolWriter
+        
+        writers = {
+            ControllerProtocol.TCP_SOCKET: TCPProtocolWriter,
+            ControllerProtocol.MQTT: MQTTProtocolWriter,
+            ControllerProtocol.ROS2: ROS2ProtocolWriter,
+            ControllerProtocol.MODBUS_TCP: ModbusProtocolWriter,
+            ControllerProtocol.OPC_UA: OPCUAProtocolWriter,
+            ControllerProtocol.PYTHON_GUI: GUIProtocolWriter,
+        }
+        writer_cls = writers.get(protocol)
+        if writer_cls:
+            return writer_cls()
+        return None
+
+    def get_dependency_notice(self) -> str:
+        from .datamodel import ControllerProtocol
+        proto = self.protocol_config.protocol
+        writer = self._get_protocol_writer(proto)
+        if writer:
+            return writer.get_dependency_notice()
+        return ""
