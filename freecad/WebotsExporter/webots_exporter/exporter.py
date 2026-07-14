@@ -723,5 +723,6 @@ class WebotsExporter:
         proto = self.protocol_config.protocol
         writer = self._get_protocol_writer(proto)
         if writer:
-            return writer.get_dependency_notice()
+            controller_dir = self.output_dir / "controllers" / f"{self.world_name}_ctrl"
+            return writer.get_dependency_notice(self.world_name, str(controller_dir))
         return ""

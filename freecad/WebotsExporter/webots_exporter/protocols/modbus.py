@@ -165,5 +165,5 @@ To read a joint telemetry of `-0.5` radians, the input register will read `65036
         map_path = controller_dir / "register_map.md"
         map_path.write_text(map_content, encoding="utf-8")
 
-    def get_dependency_notice(self) -> str:
+    def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
         return "pip install pymodbus"

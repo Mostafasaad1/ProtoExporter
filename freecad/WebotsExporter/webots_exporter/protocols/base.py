@@ -10,8 +10,8 @@ class BaseProtocolWriter(ABC):
         pass
 
     @abstractmethod
-    def get_dependency_notice(self) -> str:
+    def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
         """
-        Returns the pip install string required, or empty.
+        Returns the dependency notice or instructions.
         """
         pass

@@ -240,5 +240,5 @@ if __name__ == '__main__':
 """
         gui_path.write_text(gui_code, encoding="utf-8")
 
-    def get_dependency_notice(self) -> str:
+    def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
         return ""

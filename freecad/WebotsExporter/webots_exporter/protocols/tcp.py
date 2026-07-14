@@ -129,5 +129,5 @@ finally:
 """
         client_path.write_text(client_code, encoding="utf-8")
 
-    def get_dependency_notice(self) -> str:
+    def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
         return ""

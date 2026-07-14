@@ -147,5 +147,5 @@ while robot.step(timestep) != -1:
             lines.append(f"{joint},ns=2;s={joint}_Target")
         dest_path.write_text("\n".join(lines), encoding="utf-8")
 
-    def get_dependency_notice(self) -> str:
+    def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
         return "pip install asyncua"

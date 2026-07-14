@@ -17,8 +17,9 @@ import time
 try:
     import rclpy
     from rclpy.node import Node
-    from std_msgs.msg import Float64
+    from std_msgs.msg import Float64, String
     from sensor_msgs.msg import JointState
+    from rclpy.qos import QoSProfile, DurabilityPolicy
 except ImportError:
     print("Error: rclpy or standard ROS 2 message packages not found.")
     print("Please make sure you have sourced your ROS 2 installation and rclpy is available.")
@@ -34,6 +35,26 @@ class WebotsRos2Controller(Node):
         self.sensors = sensors
         self.joint_names = joint_names
         
+        # Load local URDF file
+        import os
+        urdf_content = ""
+        urdf_path = os.path.join(os.path.dirname(__file__), f"{{robot.getName()}}.urdf")
+        if os.path.exists(urdf_path):
+            try:
+                with open(urdf_path, 'r', encoding='utf-8') as f:
+                    urdf_content = f.read()
+            except Exception as e:
+                self.get_logger().error(f"Failed to read URDF: {{e}}")
+                
+        if urdf_content:
+            self.declare_parameter('robot_description', urdf_content)
+            qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.urdf_pub = self.create_publisher(String, 'robot_description', qos)
+            urdf_msg = String()
+            urdf_msg.data = urdf_content
+            self.urdf_pub.publish(urdf_msg)
+            self.get_logger().info("Published a dummy URDF-Like description on topic /robot_description")
+            
         # FR-008: Publish JointState telemetry
         self.joint_state_pub = self.create_publisher(JointState, f'/{{robot.getName()}}/joint_states', 10)
         
@@ -139,6 +160,32 @@ if __name__ == '__main__':
     main()
 """
         controller_path.write_text(controller_code, encoding="utf-8")
+        
+        # Write dummy URDF file
+        urdf_path = controller_dir / f"{robot_name}.urdf"
+        urdf_lines = [
+            '<?xml version="1.0"?>',
+            f'<robot name="{robot_name}">',
+            '  <link name="base_link"/>'
+        ]
+        
+        parent_link = "base_link"
+        for idx, joint in enumerate(joints):
+            child_link = f"link_{idx+1}"
+            urdf_lines.append(f'  <link name="{child_link}"/>')
+            urdf_lines.append(f'  <joint name="{joint}" type="revolute">')
+            urdf_lines.append(f'    <parent link="{parent_link}"/>')
+            urdf_lines.append(f'    <child link="{child_link}"/>')
+            urdf_lines.append('    <limit lower="-3.14" upper="3.14" effort="10" velocity="1"/>')
+            urdf_lines.append('  </joint>')
+            parent_link = child_link
+            
+        urdf_lines.append('</robot>')
+        urdf_path.write_text("\n".join(urdf_lines), encoding="utf-8")
 
-    def get_dependency_notice(self) -> str:
-        return "Requires ROS 2 and rclpy (typically installed via ROS 2 desktop/base)"
+    def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
+        return (
+            "Requires ROS 2 and rclpy.\n\n"
+            "To command the robot joints using the ROS 2 joint state publisher GUI, run the following single command in a sourced ROS 2 terminal while the Webots simulation is running:\n\n"
+            f"     ros2 run joint_state_publisher_gui joint_state_publisher_gui --ros-args -p robot_description_node:=/webots_ros2_controller -r joint_states:=/{robot_name}/joint_commands"
+        )
