@@ -4,11 +4,13 @@ from webots_exporter.datamodel import ProtocolConfig
 from webots_exporter.protocols.base import BaseProtocolWriter
 
 class OPCUAProtocolWriter(BaseProtocolWriter):
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         controller_dir = Path(export_dir) / "controllers" / f"{robot_name}_ctrl"
         controller_dir.mkdir(parents=True, exist_ok=True)
         
         server_url = config.opcua_server or "opc.tcp://127.0.0.1:4840"
+        peripherals = peripherals or []
+        peripherals_repr = repr(peripherals)
         
         # Copy or generate CSV mapping file
         dest_csv_path = controller_dir / "mapping.csv"
@@ -17,9 +19,9 @@ class OPCUAProtocolWriter(BaseProtocolWriter):
             if src_path.exists() and src_path.is_file():
                 shutil.copy(src_path, dest_csv_path)
             else:
-                self._generate_default_csv(dest_csv_path, joints)
+                self._generate_default_csv(dest_csv_path, joints, peripherals)
         else:
-            self._generate_default_csv(dest_csv_path, joints)
+            self._generate_default_csv(dest_csv_path, joints, peripherals)
             
         # Write controller file
         controller_path = controller_dir / f"{robot_name}_ctrl.py"
@@ -39,7 +41,7 @@ except ImportError:
     print("Please install it using: pip install asyncua")
     sys.exit(1)
 
-from controller import Robot, Motor
+from controller import Robot, Motor, GPS, InertialUnit, Camera, Lidar
 
 SERVER_URL = "{server_url}"
 CSV_PATH = "mapping.csv"
@@ -51,7 +53,7 @@ timestep = int(robot.getBasicTimeStep())
 # Get devices
 joint_names = {joints_repr}
 motors = {{}}
-sensors = {{}}
+joint_sensors = {{}}
 
 for name in joint_names:
     motor_dev = robot.getDevice(f"{{name}}_motor")
@@ -61,34 +63,36 @@ for name in joint_names:
     
     sensor_dev = robot.getDevice(f"{{name}}_sensor")
     if sensor_dev is not None:
-        sensors[name] = sensor_dev
+        joint_sensors[name] = sensor_dev
         sensor_dev.enable(timestep)
 
+# Initialize peripheral sensors
+peripheral_data = {peripherals_repr}
+peripheral_sensors = {{}}
+for name, sensor_type in peripheral_data:
+    dev = robot.getDevice(name)
+    if dev is not None:
+        peripheral_sensors[name] = dev
+        dev.enable(timestep)
+
 # Load CSV mappings
-joint_to_node = {{}}
+targets_node_map = {{}}
+telemetry_node_map = {{}}
+
 if os.path.exists(CSV_PATH):
     with open(CSV_PATH, mode='r', encoding='utf-8') as f:
         reader = csv.reader(f)
         header = next(reader, None)
-        if header and len(header) >= 2:
-            if "joint" not in header[0].lower() and "node" not in header[1].lower():
-                # Process the header row itself if it is not a descriptor
-                joint_name, node_id = header[0].strip(), header[1].strip()
-                if joint_name in motors:
-                    joint_to_node[joint_name] = node_id
-                else:
-                    # FR-010: Gracefully skip unknown rows
-                    print(f"Warning: CSV contains mapping for unknown joint '{{joint_name}}'. Skipping.")
-            
-            for row in reader:
-                if len(row) < 2:
-                    continue
-                joint_name, node_id = row[0].strip(), row[1].strip()
-                if joint_name in motors:
-                    joint_to_node[joint_name] = node_id
-                else:
-                    # FR-010: Gracefully skip unknown rows
-                    print(f"Warning: CSV contains mapping for unknown joint '{{joint_name}}'. Skipping.")
+        for row in reader:
+            if len(row) == 2:
+                name, node_id = row[0].strip(), row[1].strip()
+                targets_node_map[name] = node_id
+            elif len(row) >= 3:
+                name, mtype, node_id = row[0].strip(), row[1].strip(), row[2].strip()
+                if mtype.lower() == "target":
+                    targets_node_map[name] = node_id
+                elif mtype.lower() == "telemetry":
+                    telemetry_node_map[name] = node_id
 else:
     print(f"Warning: OPC UA mapping file {{CSV_PATH}} not found.")
 
@@ -104,13 +108,26 @@ class SubscriptionHandler:
         with targets_lock:
             targets[self.joint_name] = float(val)
 
+def get_sensor_value(dev):
+    if isinstance(dev, GPS):
+        return dev.getValues()
+    elif isinstance(dev, InertialUnit):
+        return dev.getRollPitchYaw()
+    elif isinstance(dev, Camera):
+        return f"Camera ({{dev.getWidth()}}x{{dev.getHeight()}})"
+    elif isinstance(dev, Lidar):
+        return f"Lidar ({{dev.getNumberOfPoints()}} pts)"
+    elif hasattr(dev, "getValue"):
+        return dev.getValue()
+    return None
+
 async def opcua_client_loop():
     while True:
         try:
             print(f"Connecting to OPC UA Server at {{SERVER_URL}}...")
             async with Client(url=SERVER_URL) as client:
                 print("Connected to OPC UA Server.")
-                for joint_name, node_id in joint_to_node.items():
+                for joint_name, node_id in targets_node_map.items():
                     try:
                         node = client.get_node(node_id)
                         sub = await client.create_subscription(500, SubscriptionHandler(joint_name))
@@ -120,7 +137,21 @@ async def opcua_client_loop():
                         print(f"Error subscribing joint '{{joint_name}}' to Node '{{node_id}}': {{e}}")
                 
                 while True:
-                    await asyncio.sleep(1)
+                    # Periodically write telemetry values
+                    for name, node_id in telemetry_node_map.items():
+                        try:
+                            val = None
+                            if name in joint_sensors:
+                                val = get_sensor_value(joint_sensors[name])
+                            elif name in peripheral_sensors:
+                                val = get_sensor_value(peripheral_sensors[name])
+                            
+                            if val is not None:
+                                node = client.get_node(node_id)
+                                await node.write_value(val)
+                        except Exception:
+                            pass
+                    await asyncio.sleep(POLLING_RATE_MS / 1000.0)
         except Exception as e:
             print(f"OPC UA client connection error: {{e}}. Retrying in 5 seconds...")
             await asyncio.sleep(5)
@@ -141,10 +172,13 @@ while robot.step(timestep) != -1:
 """
         controller_path.write_text(controller_code, encoding="utf-8")
 
-    def _generate_default_csv(self, dest_path: Path, joints: list[str]) -> None:
-        lines = ["joint_name,node_id"]
+    def _generate_default_csv(self, dest_path: Path, joints: list[str], peripherals: list[tuple[str, str]]) -> None:
+        lines = ["device_name,type,node_id"]
         for joint in joints:
-            lines.append(f"{joint},ns=2;s={joint}_Target")
+            lines.append(f"{joint},Target,ns=2;s={joint}_Target")
+            lines.append(f"{joint},Telemetry,ns=2;s={joint}_Telemetry")
+        for name, stype in peripherals:
+            lines.append(f"{name},Telemetry,ns=2;s={name}_Telemetry")
         dest_path.write_text("\n".join(lines), encoding="utf-8")
 
     def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:

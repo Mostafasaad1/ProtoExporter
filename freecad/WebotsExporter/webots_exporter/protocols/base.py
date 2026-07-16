@@ -3,7 +3,7 @@ from webots_exporter.datamodel import ProtocolConfig
 
 class BaseProtocolWriter(ABC):
     @abstractmethod
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         """
         Generates the necessary files in export_dir/controllers/<robot_name>_ctrl/
         """

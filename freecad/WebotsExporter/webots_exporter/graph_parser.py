@@ -6,7 +6,7 @@ from .exceptions import MissingRootError
 SENSOR_PREFIX_MAP = {
     "camera_": "Camera",
     "lidar_": "Lidar",
-    "gps_": "Gps",
+    "gps_": "GPS",
     "imu_": "InertialUnit"
 }
 

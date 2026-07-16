@@ -658,10 +658,11 @@ class WebotsExporter:
         
         # Collect active joints
         joints = self._collect_all_joints(root_solid)
-        if not joints:
+        peripherals = self._collect_all_peripherals(root_solid)
+        if not joints and not peripherals:
             import logging
-            logging.warning("Exporting controller but the assembly has no active joints.")
-            diag.append("WARNING: Exporting controller but the assembly has no active joints.")
+            logging.warning("Exporting controller but the assembly has no active joints or peripherals.")
+            diag.append("WARNING: Exporting controller but the assembly has no active joints or peripherals.")
             
         # Import the correct protocol writer
         writer = self._get_protocol_writer(proto)
@@ -681,7 +682,7 @@ class WebotsExporter:
         
         try:
             controller_dir.mkdir(parents=True, exist_ok=True)
-            writer.write(str(project_dir), robot_name, joints, self.protocol_config)
+            writer.write(str(project_dir), robot_name, joints, self.protocol_config, peripherals=peripherals)
             diag.append(f"  Controller Protocol={proto.value}: generated successfully at {controller_dir}")
         except Exception as e:
             diag.append(f"  Controller Protocol={proto.value}: generation failed: {e}")
@@ -695,6 +696,15 @@ class WebotsExporter:
             if joint.child:
                 joints.extend(self._collect_all_joints(joint.child))
         return joints
+
+    def _collect_all_peripherals(self, node: WbSolidNode) -> list[tuple[str, str]]:
+        peripherals = []
+        if node.sensor_type:
+            peripherals.append((node.name, node.sensor_type))
+        for joint in node.child_joints:
+            if joint.child:
+                peripherals.extend(self._collect_all_peripherals(joint.child))
+        return peripherals
 
     def _get_protocol_writer(self, protocol: ControllerProtocol) -> Optional[Any]:
         from .protocols.base import BaseProtocolWriter

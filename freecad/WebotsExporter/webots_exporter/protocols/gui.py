@@ -4,20 +4,22 @@ from webots_exporter.datamodel import ProtocolConfig
 from webots_exporter.protocols.base import BaseProtocolWriter
 
 class GUIProtocolWriter(BaseProtocolWriter):
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         controller_dir = Path(export_dir) / "controllers" / f"{robot_name}_ctrl"
         controller_dir.mkdir(parents=True, exist_ok=True)
         
         # Write controller file
         controller_path = controller_dir / f"{robot_name}_ctrl.py"
         joints_repr = repr(joints)
+        peripherals = peripherals or []
+        peripherals_repr = repr(peripherals)
         
         controller_code = f"""import socket
 import json
 import subprocess
 import sys
 import time
-from controller import Robot, Motor
+from controller import Robot, Motor, GPS, InertialUnit, Camera, Lidar
 
 # FR-004: Polling rate in milliseconds
 POLLING_RATE_MS = 100
@@ -42,6 +44,15 @@ for name in motor_names:
         sensors[name] = sensor_dev
         sensor_dev.enable(timestep)
 
+# Initialize peripheral sensors
+peripheral_data = {peripherals_repr}
+peripheral_sensors = {{}}
+for name, sensor_type in peripheral_data:
+    dev = robot.getDevice(name)
+    if dev is not None:
+        peripheral_sensors[name] = dev
+        dev.enable(timestep)
+
 # Setup non-blocking server socket
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -61,6 +72,21 @@ except Exception as e:
 client_conn = None
 buffer = ""
 last_publish_time = 0
+
+def get_sensor_value(dev):
+    if isinstance(dev, GPS):
+        vals = dev.getValues()
+        return [round(v, 4) for v in vals] if vals else None
+    elif isinstance(dev, InertialUnit):
+        vals = dev.getRollPitchYaw()
+        return [round(v, 4) for v in vals] if vals else None
+    elif isinstance(dev, Camera):
+        return f"Camera ({{dev.getWidth()}}x{{dev.getHeight()}})"
+    elif isinstance(dev, Lidar):
+        return f"Lidar ({{dev.getNumberOfPoints()}} pts)"
+    elif hasattr(dev, "getValue"):
+        return round(dev.getValue(), 4)
+    return None
 
 while robot.step(timestep) != -1:
     # Accept client connection non-blocking
@@ -115,7 +141,11 @@ while robot.step(timestep) != -1:
         try:
             current_time_ms = int(time.time() * 1000)
             if current_time_ms - last_publish_time >= POLLING_RATE_MS:
-                telemetry_data = {{name: sensor.getValue() for name, sensor in sensors.items()}}
+                telemetry_data = {{}}
+                for name, sensor in sensors.items():
+                    telemetry_data[name] = sensor.getValue()
+                for name, sensor in peripheral_sensors.items():
+                    telemetry_data[name] = get_sensor_value(sensor)
                 client_conn.sendall((json.dumps(telemetry_data) + '\\n').encode('utf-8'))
                 last_publish_time = current_time_ms
         except Exception as e:
@@ -137,12 +167,13 @@ import sys
 
 PORT = 5005
 JOINTS = {joints_repr}
+PERIPHERALS = {peripherals_repr}
 
 class JoggerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Robot Jogging Panel")
-        self.root.geometry("500x400")
+        self.root.geometry("550x550")
         
         # Connection status label
         self.status_lbl = tk.Label(root, text="Connecting to Webots...", fg="orange", font=("Arial", 12, "bold"))
@@ -152,11 +183,19 @@ class JoggerApp:
         self.frame = tk.Frame(root)
         self.frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
         
+        # Joints configuration section
+        self.joints_lf = tk.LabelFrame(self.frame, text="Actuated Joints", font=("Arial", 10, "bold"), padx=10, pady=5)
+        self.joints_lf.pack(fill=tk.BOTH, expand=True, pady=5)
+
         self.joint_widgets = {{}}
         for joint in JOINTS:
-            lf = tk.LabelFrame(self.frame, text=joint, font=("Arial", 10, "bold"), padx=10, pady=5)
+            lf = tk.Frame(self.joints_lf)
             lf.pack(fill=tk.X, pady=5)
             
+            # Name
+            name_lbl = tk.Label(lf, text=f"{{joint}}:", width=15, anchor="w", font=("Arial", 9, "bold"))
+            name_lbl.pack(side=tk.LEFT)
+
             # Telemetry display
             val_lbl = tk.Label(lf, text="Current: 0.000 rad", width=18, anchor="w", font=("Courier", 10))
             val_lbl.pack(side=tk.LEFT)
@@ -175,6 +214,20 @@ class JoggerApp:
             
             self.joint_widgets[joint] = {{"label": val_lbl, "scale": scale}}
             
+        # Peripherals section
+        self.peripheral_widgets = {{}}
+        if PERIPHERALS:
+            self.periph_lf = tk.LabelFrame(self.frame, text="Peripheral Sensors", font=("Arial", 10, "bold"), padx=10, pady=5)
+            self.periph_lf.pack(fill=tk.BOTH, expand=True, pady=10)
+            for name, stype in PERIPHERALS:
+                row_f = tk.Frame(self.periph_lf)
+                row_f.pack(fill=tk.X, pady=2)
+                name_lbl = tk.Label(row_f, text=f"{{name}} ({{stype}}):", width=25, anchor="w", font=("Arial", 9, "bold"))
+                name_lbl.pack(side=tk.LEFT)
+                val_lbl = tk.Label(row_f, text="N/A", anchor="w", font=("Courier", 9))
+                val_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                self.peripheral_widgets[name] = val_lbl
+
         self.socket = None
         self.connected = False
         
@@ -229,9 +282,11 @@ class JoggerApp:
                 time.sleep(2)
                 
     def update_ui(self, telemetry):
-        for joint, val in telemetry.items():
-            if joint in self.joint_widgets:
-                self.joint_widgets[joint]["label"].config(text=f"Current: {{float(val):.3f}} rad")
+        for name, val in telemetry.items():
+            if name in self.joint_widgets:
+                self.joint_widgets[name]["label"].config(text=f"Current: {{float(val):.3f}} rad")
+            elif name in self.peripheral_widgets:
+                self.peripheral_widgets[name].config(text=str(val))
 
 if __name__ == '__main__':
     root = tk.Tk()

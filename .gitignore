@@ -7,3 +7,14 @@ __pycache__/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+.agents/
+.specify/
+specs/
+AGENTS.md
+build/
+log/
+install/
+.pytest_cache/
+.opencode/
+Media/

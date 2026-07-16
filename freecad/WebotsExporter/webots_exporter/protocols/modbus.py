@@ -4,7 +4,7 @@ from webots_exporter.datamodel import ProtocolConfig
 from webots_exporter.protocols.base import BaseProtocolWriter
 
 class ModbusProtocolWriter(BaseProtocolWriter):
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         controller_dir = Path(export_dir) / "controllers" / f"{robot_name}_ctrl"
         controller_dir.mkdir(parents=True, exist_ok=True)
         
@@ -14,6 +14,40 @@ class ModbusProtocolWriter(BaseProtocolWriter):
         # Write controller file
         controller_path = controller_dir / f"{robot_name}_ctrl.py"
         joints_repr = repr(joints)
+        peripherals = peripherals or []
+        peripherals_repr = repr(peripherals)
+        
+        # Build register map documentation and runtime mappings
+        holding_rows = []
+        input_rows = []
+        for idx, joint in enumerate(joints):
+            holding_rows.append(f"| 4000{idx+1} | {idx} | {joint} | Target Position for {joint} |")
+            input_rows.append(f"| 3000{idx+1} | {idx} | {joint} | Telemetry position for {joint} (joint sensor) |")
+            
+        offset = len(joints)
+        peripheral_mappings = []
+        for name, stype in peripherals:
+            if stype == "GPS":
+                size = 3
+                desc = f"GPS {name} coordinates [X, Y, Z]"
+                input_rows.append(f"| 3000{offset+1} - 3000{offset+3} | {offset} - {offset+2} | {name} | {desc} |")
+            elif stype == "InertialUnit":
+                size = 3
+                desc = f"IMU {name} orientation [Roll, Pitch, Yaw]"
+                input_rows.append(f"| 3000{offset+1} - 3000{offset+3} | {offset} - {offset+2} | {name} | {desc} |")
+            elif stype in ("Camera", "Lidar"):
+                size = 1
+                desc = f"Sensor {name} status (1 = active)"
+                input_rows.append(f"| 3000{offset+1} | {offset} | {name} | {desc} |")
+            else:
+                size = 1
+                desc = f"Sensor {name} scalar value"
+                input_rows.append(f"| 3000{offset+1} | {offset} | {name} | {desc} |")
+            peripheral_mappings.append((name, stype, offset, size))
+            offset += size
+            
+        peripheral_mappings_repr = repr(peripheral_mappings)
+        total_registers = offset
         
         controller_code = f"""import sys
 import time
@@ -27,7 +61,7 @@ except ImportError:
     print("Please install it using: pip install pymodbus")
     sys.exit(1)
 
-from controller import Robot, Motor
+from controller import Robot, Motor, GPS, InertialUnit, Camera, Lidar
 
 # FR-004: Polling rate in milliseconds
 POLLING_RATE_MS = 500
@@ -52,6 +86,15 @@ for name in joint_names:
     if sensor_dev is not None:
         sensors[name] = sensor_dev
         sensor_dev.enable(timestep)
+
+# Initialize peripheral sensors
+peripheral_data = {peripherals_repr}
+peripheral_sensors = {{}}
+for name, sensor_type in peripheral_data:
+    dev = robot.getDevice(name)
+    if dev is not None:
+        peripheral_sensors[name] = dev
+        dev.enable(timestep)
 
 motors_list = list(motors.keys())
 motors_count = len(motors_list)
@@ -86,7 +129,7 @@ def int16_to_float(register_val, scale=1000):
 
 # Setup Modbus server datastore
 hr_block = CustomHoldingRegisters(0, [0] * 100)
-ir_block = ModbusSequentialDataBlock(0, [0] * 100)
+ir_block = ModbusSequentialDataBlock(0, [0] * max(100, {total_registers}))
 
 store = ModbusSlaveContext(
     hr=hr_block,
@@ -124,26 +167,39 @@ while robot.step(timestep) != -1:
     # Publish telemetry to input registers
     current_time_ms = int(time.time() * 1000)
     if current_time_ms - last_publish_time >= POLLING_RATE_MS:
-        telemetry_vals = []
-        for name in joint_names:
+        telemetry_vals = [0] * {total_registers}
+        for idx, name in enumerate(joint_names):
             sensor = sensors.get(name)
             if sensor is not None:
-                val = float_to_int16(sensor.getValue())
-            else:
-                val = 0
-            telemetry_vals.append(val)
+                telemetry_vals[idx] = float_to_int16(sensor.getValue())
+                
+        peripheral_map = {peripheral_mappings_repr}
+        for name, stype, off, size in peripheral_map:
+            dev = peripheral_sensors.get(name)
+            if dev is not None:
+                if stype == "GPS":
+                    vals = dev.getValues()
+                    if vals:
+                        telemetry_vals[off] = float_to_int16(vals[0])
+                        telemetry_vals[off+1] = float_to_int16(vals[1])
+                        telemetry_vals[off+2] = float_to_int16(vals[2])
+                elif stype == "InertialUnit":
+                    vals = dev.getRollPitchYaw()
+                    if vals:
+                        telemetry_vals[off] = float_to_int16(vals[0])
+                        telemetry_vals[off+1] = float_to_int16(vals[1])
+                        telemetry_vals[off+2] = float_to_int16(vals[2])
+                elif stype in ("Camera", "Lidar"):
+                    telemetry_vals[off] = 1
+                else:
+                    if hasattr(dev, "getValue"):
+                        telemetry_vals[off] = float_to_int16(dev.getValue())
         store.setValues(4, 0, telemetry_vals)
         last_publish_time = current_time_ms
 """
         controller_path.write_text(controller_code, encoding="utf-8")
         
         # Generate register map markdown content
-        holding_rows = []
-        input_rows = []
-        for idx, joint in enumerate(joints):
-            holding_rows.append(f"| 4000{idx+1} | {idx} | {joint} | Target Position for {joint} |")
-            input_rows.append(f"| 3000{idx+1} | {idx} | {joint} | Telemetry position for {joint} |")
-            
         map_content = f"""# Modbus TCP Register Map - {robot_name}
 
 All values are scaled by **1000** and stored as **Signed 16-bit Integers**.
@@ -158,7 +214,7 @@ To read a joint telemetry of `-0.5` radians, the input register will read `65036
 
 ## Input Registers (3xxxx) - Telemetry (Sensors)
 
-| Register Address | Offset | Joint Name | Description |
+| Register Address | Offset | Device Name | Description |
 |---|---|---|---|
 {"\n".join(input_rows)}
 """

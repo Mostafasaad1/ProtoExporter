@@ -17,6 +17,16 @@
   translation {{ m.vec3(node.translation) }}
   rotation {{ m.axis_angle(node.rotation) }}
   {% endif %}
+  {% if node.sensor_type == 'Camera' %}
+  fieldOfView 1.047
+  width 640
+  height 480
+  {% elif node.sensor_type == 'Lidar' %}
+  horizontalResolution 512
+  fieldOfView 6.28
+  verticalFieldOfView 0.2
+  numberOfLayers 16
+  {% endif %}
   children [
     {% for geo in node.geometries %}
     {{ m.shape_block(geo) }}
