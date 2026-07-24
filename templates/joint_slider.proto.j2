@@ -1,0 +1,22 @@
+ready {% import "macros.j2" as m %}
+SliderJoint {
+  jointParameters JointParameters {
+    axis {{ m.vec3(joint.axis) }}
+    minStop {{ joint.min_stop }}
+    maxStop {{ joint.max_stop }}
+  }
+  device [
+    {% if joint.actuated %}
+    LinearMotor {
+      name "{{ joint.name }}_motor"
+      maxForce 100000
+    }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_sensor"
+    }
+    {% endif %}
+  ]
+  endPoint {{ child_solid }}
+}

@@ -1,0 +1,51 @@
+{% import "macros.j2" as m %}
+{{ node.sensor_type if node.sensor_type else (node_type|default('Solid')) }} {
+  {% if is_root %}
+  name IS name
+  translation IS translation
+  rotation IS rotation
+  {% if node_type == 'Robot' %}
+  controller IS controller
+  controllerArgs IS controllerArgs
+  customData IS customData
+  supervisor IS supervisor
+  synchronization IS synchronization
+  selfCollision IS selfCollision
+  {% endif %}
+  {% else %}
+  name "{{ node.name }}"
+  translation {{ m.vec3(node.translation) }}
+  rotation {{ m.axis_angle(node.rotation) }}
+  {% endif %}
+  {% if node.sensor_type == 'Camera' %}
+  fieldOfView 1.047
+  width 640
+  height 480
+  {% elif node.sensor_type == 'Lidar' %}
+  horizontalResolution 512
+  fieldOfView 6.28
+  verticalFieldOfView 0.2
+  numberOfLayers 16
+  {% endif %}
+  children [
+    {% for geo in node.geometries %}
+    {{ m.shape_block(geo) }}
+    {% endfor %}
+    {% for joint in joints %}
+    {{ joint }}
+    {% endfor %}
+  ]
+  {% if node.bounding_object %}
+  {{ m.bounding_block(node.bounding_object) }}
+  {% endif %}
+  {% if node.physics %}
+  {% if is_root %}
+  %< if (!fields.staticBase.value) { >%
+  {% endif %}
+  {{ m.physics_block(node.physics) }}
+  {% if is_root %}
+  %< } >%
+  {% endif %}
+  {% endif %}
+}
+

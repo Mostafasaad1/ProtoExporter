@@ -1,0 +1,23 @@
+{% import "macros.j2" as m %}
+HingeJoint {
+  jointParameters HingeJointParameters {
+    anchor {{ m.vec3(joint.anchor) }}
+    axis {{ m.vec3(joint.axis) }}
+    minStop {{ joint.min_stop }}
+    maxStop {{ joint.max_stop }}
+  }
+  device [
+    {% if joint.actuated %}
+    RotationalMotor {
+      name "{{ joint.name }}_motor"
+      maxTorque 10000
+    }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_sensor"
+    }
+    {% endif %}
+  ]
+  endPoint {{ child_solid }}
+}

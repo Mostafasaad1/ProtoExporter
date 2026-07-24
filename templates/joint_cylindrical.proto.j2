@@ -1,0 +1,54 @@
+{% import "macros.j2" as m %}
+HingeJoint {
+  jointParameters HingeJointParameters {
+    anchor {{ m.vec3(joint.anchor) }}
+    axis {{ m.vec3(joint.axis) }}
+    minStop {{ joint.min_stop_rot }}
+    maxStop {{ joint.max_stop_rot }}
+  }
+  device [
+    {% if joint.actuated %}
+    RotationalMotor {
+      name "{{ joint.name }}_rot_motor"
+      maxTorque 10000
+    }
+    {% endif %}
+    {% if joint.sensed %}
+    PositionSensor {
+      name "{{ joint.name }}_rot_sensor"
+    }
+    {% endif %}
+  ]
+  endPoint Solid {
+    name "{{ joint.name }}_dummy"
+    physics Physics {
+      density -1
+      mass 0.01
+      centerOfMass [ 0 0 0 ]
+      inertiaMatrix [ 1e-4 1e-4 1e-4, 0 0 0 ]
+    }
+    children [
+      SliderJoint {
+        jointParameters JointParameters {
+          axis {{ m.vec3(joint.axis) }}
+          minStop {{ joint.min_stop_trans }}
+          maxStop {{ joint.max_stop_trans }}
+        }
+        device [
+          {% if joint.actuated %}
+          LinearMotor {
+            name "{{ joint.name }}_trans_motor"
+            maxForce 100000
+          }
+          {% endif %}
+          {% if joint.sensed %}
+          PositionSensor {
+            name "{{ joint.name }}_trans_sensor"
+          }
+          {% endif %}
+        ]
+        endPoint {{ child_solid }}
+      }
+    ]
+  }
+}

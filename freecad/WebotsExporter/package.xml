@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>FreeCAD Webots Exporter</name>
+  <description>Export FreeCAD 1.0+ Native Assemblies into Webots simulation files (.wbt)</description>
+  <version>0.1.0</version>
+  <date>2026-06-19</date>
+  <maintainer email="unknown">ProtoExporter Team</maintainer>
+  <license>MIT</license>
+  <icon>webots_exporter/gui/resources/icon.svg</icon>
+  <content>
+    <workbench>
+      <classname>WebotsExporterWorkbench</classname>
+      <subdirectory>.</subdirectory>
+      <icon>webots_exporter/gui/resources/icon.svg</icon>
+    </workbench>
+  </content>
+</package>
