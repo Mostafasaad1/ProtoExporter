@@ -6,12 +6,11 @@
   <date>2026-06-19</date>
   <maintainer email="unknown">ProtoExporter Team</maintainer>
   <license>MIT</license>
-  <icon>freecad/WebotsExporter/webots_exporter/gui/resources/icon.svg</icon>
+  <icon>webots_exporter/gui/resources/icon.svg</icon>
   <content>
     <workbench>
       <classname>WebotsExporterWorkbench</classname>
-      <subdirectory>freecad/WebotsExporter</subdirectory>
-      <icon>freecad/WebotsExporter/webots_exporter/gui/resources/icon.svg</icon>
+      <icon>webots_exporter/gui/resources/icon.svg</icon>
     </workbench>
   </content>
 </package>
