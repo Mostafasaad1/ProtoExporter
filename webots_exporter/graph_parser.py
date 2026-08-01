@@ -58,7 +58,7 @@ class AssemblyGraphParser:
         if not self._part_names:
             raise MissingRootError("No parts in assembly graph")
 
-        # Explicit grounded parts take highest priority.
+        # Tier 1: Explicit grounded/fixed parts take highest priority.
         if fixed_parts:
             for fixed in fixed_parts:
                 if fixed in self._part_names:
@@ -74,27 +74,51 @@ class AssemblyGraphParser:
                     f"Part '{n}' has no connections; cannot infer root"
                 )
 
-        # FreeCAD joints have no guaranteed Reference1=parent / Reference2=child
-        # ordering — a link can appear as Reference1 in multiple joints yet still
-        # not be the root.  The directed in-degree approach is therefore
-        # fundamentally unreliable and is not used here.
-        #
-        # Reliable heuristic: in a kinematic chain the base is always a leaf
-        # (undirected degree = 1).  The assembly group traversal visits the base
-        # link first, so among all leaves we pick the one with the lowest index
-        # in the collection order.
+        order = {name: i for i, name in enumerate(self._part_names)}
+
+        # Tier 2: Keyword heuristic for common root names
+        root_keywords = ("base", "ground", "frame", "chassis", "bed", "stand")
+        matching_parts = [
+            n for n in self._part_names
+            if any(kw in n.lower() for kw in root_keywords)
+        ]
+        if matching_parts:
+            return min(matching_parts, key=lambda n: order[n])
+
+        # Tier 3: Graph topology heuristic
         undirected_degrees = {
             n: len(self.undirected_adjacency.get(n, set()))
             for n in self._part_names
         }
-        order = {name: i for i, name in enumerate(self._part_names)}
         leaves = [n for n, d in undirected_degrees.items() if d == 1]
+        max_degree = max(undirected_degrees.values()) if undirected_degrees else 0
+
+        # Simple serial chain (2 leaves, max degree 2): pick leaf collected first
+        if len(leaves) == 2 and max_degree <= 2:
+            return min(leaves, key=lambda n: order[n])
+
+        # Branching or complex graph: pick central junction node minimizing distance to leaves
+        non_leaves = [n for n in self._part_names if n not in leaves]
+        if non_leaves:
+            def eval_node(start_node: str) -> tuple[int, int, int]:
+                distances = {start_node: 0}
+                q = [start_node]
+                while q:
+                    curr = q.pop(0)
+                    for nbr in self.undirected_adjacency.get(curr, set()):
+                        if nbr not in distances:
+                            distances[nbr] = distances[curr] + 1
+                            q.append(nbr)
+                leaf_dists = [distances.get(l, 999) for l in leaves]
+                max_d = max(leaf_dists) if leaf_dists else 0
+                sum_d = sum(leaf_dists) if leaf_dists else 0
+                return (max_d, sum_d, order[start_node])
+
+            return min(non_leaves, key=eval_node)
 
         if leaves:
             return min(leaves, key=lambda n: order[n])
 
-        # No leaves (fully-connected or cycle): pick the node with the fewest
-        # undirected connections, breaking ties by collection order.
         min_deg = min(undirected_degrees.values())
         candidates = [n for n, d in undirected_degrees.items() if d == min_deg]
         return min(candidates, key=lambda n: order[n])

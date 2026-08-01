@@ -54,6 +54,12 @@ class ExportTaskPanel:
         layout.addWidget(QtWidgets.QLabel("Collision Strategy:"))
         layout.addWidget(self._collision_combo)
 
+        # Base / Root part override selection
+        self._root_combo = QtWidgets.QComboBox()
+        self._root_combo.addItem("Auto (Inferred)")
+        layout.addWidget(QtWidgets.QLabel("Base / Root Part:"))
+        layout.addWidget(self._root_combo)
+
         # Visual quality slider selection
         layout.addWidget(QtWidgets.QLabel("Mesh Visual Quality:"))
         self._quality_layout = QtWidgets.QHBoxLayout()
@@ -215,6 +221,25 @@ class ExportTaskPanel:
         if not doc:
             return
             
+        # Populate Root Part dropdown
+        try:
+            from ..exporter import WebotsExporter
+            from pathlib import Path
+            temp_exporter = WebotsExporter(output_dir=Path("/tmp"))
+            parts = temp_exporter._collect_parts(doc)
+            curr_selection = self._root_combo.currentText()
+            self._root_combo.clear()
+            self._root_combo.addItem("Auto (Inferred)")
+            for p in parts:
+                lbl = getattr(p, "Label", getattr(p, "Name", ""))
+                if lbl:
+                    self._root_combo.addItem(lbl)
+            idx = self._root_combo.findText(curr_selection)
+            if idx >= 0:
+                self._root_combo.setCurrentIndex(idx)
+        except Exception:
+            pass
+
         joints = []
         for obj in doc.Objects:
             if obj.TypeId == "Assembly::JointGroup":
@@ -430,12 +455,16 @@ class ExportTaskPanel:
                 return False
             self._validate_csv(csv_path)
 
+        root_choice = self._root_combo.currentText()
+        override_root = None if root_choice.startswith("Auto") else root_choice
+
         exporter = WebotsExporter(
             output_dir=output_dir,
             world_name=world_name,
             collision_strategy=strategy,
             visual_quality_pct=float(quality_pct),
             protocol_config=protocol_config,
+            override_root=override_root,
         )
         try:
             doc = FreeCAD.ActiveDocument

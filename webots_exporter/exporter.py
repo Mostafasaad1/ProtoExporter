@@ -43,6 +43,7 @@ class WebotsExporter:
         collision_strategy: CollisionStrategy = "auto",
         visual_quality_pct: float = 50.0,
         protocol_config: Optional[ProtocolConfig] = None,
+        override_root: Optional[str] = None,
     ):
         self.output_dir = output_dir
         self.world_name = world_name
@@ -50,6 +51,7 @@ class WebotsExporter:
         self.visual_quality_pct = visual_quality_pct
         self.renderer = WbtRenderer()
         self.protocol_config = protocol_config or ProtocolConfig()
+        self.override_root = override_root
         
         from .mesh_export import quality_to_deflection
         self.linear_deflection, self.angular_deflection = quality_to_deflection(self.visual_quality_pct)
@@ -112,14 +114,37 @@ class WebotsExporter:
 
         fixed_parts = []
         for part in parts:
-            if getattr(part, "fixedPosition", False) or getattr(part, "isFixed", False):
-                fixed_parts.append(getattr(part, "Label", getattr(part, "Name", "")))
+            label = getattr(part, "Label", getattr(part, "Name", ""))
+            if (
+                getattr(part, "fixedPosition", False)
+                or getattr(part, "isFixed", False)
+                or getattr(part, "Grounded", False)
+                or getattr(part, "isGrounded", False)
+            ):
+                if label:
+                    fixed_parts.append(label)
+
+        for obj in getattr(fc_document, "Objects", []):
+            if hasattr(obj, "TypeId") and obj.TypeId.startswith("Assembly::Joint"):
+                parent_ref, child_ref = self._get_joint_parts(obj)
+                p_name = self._find_part_label(parent_ref, parts)
+                c_name = self._find_part_label(child_ref, parts)
+                jtype = getattr(obj, "JointType", "") or getattr(obj, "Type", "")
+                if jtype in ("Fixed", "Ground", "Grounded") or obj.TypeId in ("Assembly::JointFixed", "Assembly::JointGrounded"):
+                    if p_name and not c_name and p_name in parser.part_names:
+                        fixed_parts.append(p_name)
+                    elif c_name and not p_name and c_name in parser.part_names:
+                        fixed_parts.append(c_name)
 
         contractor = FixedJointContractor(parser)
         contractor.contract()
 
         try:
-            root_name = parser.infer_root(fixed_parts=fixed_parts)
+            if self.override_root and self.override_root in parser.part_names:
+                root_name = self.override_root
+                diag_lines.append(f"\n-- Root Override: {root_name}")
+            else:
+                root_name = parser.infer_root(fixed_parts=fixed_parts)
         except Exception as e:
             diag_lines.append(f"\nERROR in infer_root: {e}")
             diag_path = self.output_dir / "export_diagnostic.txt"
