@@ -252,23 +252,65 @@ def export_obj(
     if has_faces:
         def_color = resolve_part_color(fc_part, color)
         global_vertices = []
+        global_normals = []
         grouped_faces = {}
         for face_idx, face in enumerate(fc_shape.Faces):
             face_color = get_face_color(fc_part, face_idx, def_color)
             rounded_rgb = round_color(face_color)
             if rounded_rgb not in grouped_faces:
                 grouped_faces[rounded_rgb] = []
+
             try:
-                verts, tris = face.tessellate(deflection)
+                try:
+                    verts, tris = face.tessellate(linear_deflection, angular_deflection)
+                except Exception:
+                    verts, tris = face.tessellate(deflection)
             except Exception as e:
                 print(f"[ProtoExporter] Face tessellation failed for face {face_idx}: {e}")
                 continue
-            global_vertex_count = len(global_vertices)
+
+            if not verts or not tris:
+                continue
+
+            face_verts = []
             for v in verts:
-                global_vertices.append((v.x * 0.001, v.y * 0.001, v.z * 0.001))
+                face_verts.append((v.x * 0.001, v.y * 0.001, v.z * 0.001))
+
+            face_tris = []
+            v_normals_accum = [[0.0, 0.0, 0.0] for _ in range(len(verts))]
             for tri in tris:
+                if len(tri) >= 3:
+                    i0, i1, i2 = int(tri[0]), int(tri[1]), int(tri[2])
+                    face_tris.append([i0, i1, i2])
+                    v0 = face_verts[i0]
+                    v1 = face_verts[i1]
+                    v2 = face_verts[i2]
+                    ax, ay, az = v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]
+                    bx, by, bz = v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]
+                    nx = ay * bz - az * by
+                    ny = az * bx - ax * bz
+                    nz = ax * by - ay * bx
+                    for i in (i0, i1, i2):
+                        if 0 <= i < len(v_normals_accum):
+                            v_normals_accum[i][0] += nx
+                            v_normals_accum[i][1] += ny
+                            v_normals_accum[i][2] += nz
+
+            face_norms = []
+            for vn in v_normals_accum:
+                length = (vn[0]**2 + vn[1]**2 + vn[2]**2)**0.5
+                if length > 1e-9:
+                    face_norms.append((vn[0] / length, vn[1] / length, vn[2] / length))
+                else:
+                    face_norms.append((0.0, 0.0, 1.0))
+
+            global_vertex_count = len(global_vertices)
+            global_vertices.extend(face_verts)
+            global_normals.extend(face_norms)
+            for tri in face_tris:
                 global_tri = [global_vertex_count + int(idx) + 1 for idx in tri]
                 grouped_faces[rounded_rgb].append(global_tri)
+
         if len(global_vertices) > 0:
             mtl_path = output_path.with_suffix(".mtl")
             transparency = 0.0
@@ -292,23 +334,30 @@ def export_obj(
                     if transparency > 0.0:
                         f.write(f"d {1.0 - transparency:.4f}\n")
                     f.write("illum 1\n")
+
             with open(output_path, "w") as f:
                 f.write(f"mtllib {mtl_path.name}\n")
                 for v in global_vertices:
                     f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
+                for vn in global_normals:
+                    f.write(f"vn {vn[0]:.6f} {vn[1]:.6f} {vn[2]:.6f}\n")
                 for rounded_rgb in sorted(grouped_faces.keys()):
                     mat_name = generate_material_name(rounded_rgb)
                     f.write(f"usemtl {mat_name}\n")
                     for tri in grouped_faces[rounded_rgb]:
-                        f.write(f"f {' '.join(str(idx) for idx in tri)}\n")
+                        f.write(f"f {' '.join(f'{idx}//{idx}' for idx in tri)}\n")
             return
 
     mesh = getattr(fc_shape, "Mesh", None)
     if mesh is None and fc_shape is not None:
         try:
             import MeshPart
-            # Use specified deflection values
-            mesh = MeshPart.meshFromShape(Shape=fc_shape, LinearDeflection=linear_deflection, AngularDeflection=angular_deflection)
+            mesh = MeshPart.meshFromShape(
+                Shape=fc_shape,
+                LinearDeflection=linear_deflection,
+                AngularDeflection=angular_deflection,
+                Relative=False,
+            )
         except Exception:
             pass
 
@@ -407,13 +456,20 @@ def export_collision_stl(
     fc_shape: Any,
     output_path: Path,
     decimate: bool = False,
+    linear_deflection: float = 0.02,
+    angular_deflection: float = 0.1,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     mesh = getattr(fc_shape, "Mesh", None)
     if mesh is None:
         try:
             import MeshPart
-            mesh = MeshPart.meshFromShape(fc_shape)
+            mesh = MeshPart.meshFromShape(
+                Shape=fc_shape,
+                LinearDeflection=linear_deflection,
+                AngularDeflection=angular_deflection,
+                Relative=False,
+            )
         except Exception:
             pass
 
