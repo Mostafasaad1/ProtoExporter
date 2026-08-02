@@ -44,6 +44,9 @@ class WebotsExporter:
         visual_quality_pct: float = 50.0,
         protocol_config: Optional[ProtocolConfig] = None,
         override_root: Optional[str] = None,
+        custom_description: str = "",
+        doc_url: str = "",
+        license: str = "",
     ):
         self.output_dir = output_dir
         self.world_name = world_name
@@ -52,6 +55,9 @@ class WebotsExporter:
         self.renderer = WbtRenderer()
         self.protocol_config = protocol_config or ProtocolConfig()
         self.override_root = override_root
+        self.custom_description = custom_description
+        self.doc_url = doc_url
+        self.license = license
         
         from .mesh_export import quality_to_deflection
         self.linear_deflection, self.angular_deflection = quality_to_deflection(self.visual_quality_pct)
@@ -169,8 +175,17 @@ class WebotsExporter:
         self._export_visual_meshes_diag(root_solid, meshes_dir, parts, diag_lines)
         self._apply_collision_geometry(root_solid, parts, meshes_dir)
 
+        self._capture_preview_image()
+        proto_description = self._build_proto_description(root_solid)
+
         proto_path = self.output_dir / f"{self.world_name}.proto"
-        proto_content = self.renderer.render_proto(self.world_name, root_solid)
+        proto_content = self.renderer.render_proto(
+            self.world_name,
+            root_solid,
+            description=proto_description,
+            doc_url=self.doc_url,
+            license=self.license,
+        )
         proto_path.write_text(proto_content, encoding="utf-8")
 
         if self.protocol_config.protocol != ControllerProtocol.NONE:
@@ -759,3 +774,88 @@ class WebotsExporter:
             controller_dir = self.output_dir / "controllers" / f"{self.world_name}_ctrl"
             return writer.get_dependency_notice(self.world_name, str(controller_dir))
         return ""
+
+    def _capture_preview_image(self) -> None:
+        """Capture transparent PNG snapshot of assembly 3D view using FreeCAD API."""
+        try:
+            import FreeCADGui
+            doc = getattr(FreeCADGui, "ActiveDocument", None)
+            if doc and hasattr(doc, "ActiveView") and doc.ActiveView is not None:
+                sel = []
+                try:
+                    sel = FreeCADGui.Selection.getSelection()
+                    FreeCADGui.Selection.clearSelection()
+                except Exception:
+                    pass
+
+                try:
+                    icons_dir = self.output_dir / "icons"
+                    icons_dir.mkdir(parents=True, exist_ok=True)
+                    icon_path = icons_dir / f"{self.world_name}.png"
+                    doc.ActiveView.saveImage(str(icon_path), 128, 128, "Transparent")
+                finally:
+                    for obj in sel:
+                        try:
+                            FreeCADGui.Selection.addSelection(obj)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    def _collect_tree_stats(self, node: WbSolidNode) -> tuple[int, int, int]:
+        """Collect count of (joints, actuators, sensors) in kinematic tree."""
+        num_joints = 0
+        num_actuators = 0
+        num_sensors = 0
+
+        if getattr(node, "sensor_type", None):
+            num_sensors += 1
+
+        for j in node.child_joints:
+            num_joints += 1
+            if getattr(j, "actuated", False):
+                num_actuators += 1
+            if getattr(j, "sensed", False):
+                num_sensors += 1
+            if j.child:
+                cj, ca, cs = self._collect_tree_stats(j.child)
+                num_joints += cj
+                num_actuators += ca
+                num_sensors += cs
+
+        return num_joints, num_actuators, num_sensors
+
+    def _build_proto_description(self, root_solid: WbSolidNode) -> str:
+        """Build combined description from custom description and auto-generated stats."""
+        num_joints, num_actuators, num_sensors = self._collect_tree_stats(root_solid)
+        num_controllers = 0
+        if self.protocol_config.protocol != ControllerProtocol.NONE or self.renderer.has_joints(root_solid):
+            num_controllers = 1
+
+        stats_items = []
+        if num_joints > 0:
+            stats_items.append(f"{num_joints} joint" + ("s" if num_joints != 1 else ""))
+        if num_actuators > 0:
+            stats_items.append(f"{num_actuators} actuator" + ("s" if num_actuators != 1 else ""))
+        if num_sensors > 0:
+            stats_items.append(f"{num_sensors} sensor" + ("s" if num_sensors != 1 else ""))
+        if num_controllers > 0:
+            stats_items.append(f"{num_controllers} controller" + ("s" if num_controllers != 1 else ""))
+
+        stats_text = ""
+        if stats_items:
+            if len(stats_items) == 1:
+                formatted = stats_items[0]
+            elif len(stats_items) == 2:
+                formatted = f"{stats_items[0]} and {stats_items[1]}"
+            else:
+                formatted = ", ".join(stats_items[:-1]) + f", and {stats_items[-1]}"
+            stats_text = f"Auto-generated PROTO model containing {formatted}."
+
+        desc_parts = []
+        if self.custom_description:
+            desc_parts.append(self.custom_description)
+        if stats_text:
+            desc_parts.append(stats_text)
+
+        return "\n".join(desc_parts)

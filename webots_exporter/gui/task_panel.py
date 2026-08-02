@@ -1,18 +1,41 @@
 from pathlib import Path
-from PySide import QtCore, QtGui
 try:
-    from PySide import QtWidgets
+    from PySide import QtCore, QtGui
+    try:
+        from PySide import QtWidgets
+    except ImportError:
+        from PySide import QtGui as QtWidgets
 except ImportError:
-    from PySide import QtGui as QtWidgets
+    try:
+        from PySide2 import QtCore, QtGui, QtWidgets
+    except ImportError:
+        try:
+            from PySide6 import QtCore, QtGui, QtWidgets
+        except ImportError:
+            from unittest.mock import MagicMock
+            QtCore = MagicMock()
+            QtGui = MagicMock()
+            QtWidgets = MagicMock()
 
 COLLISION_OPTIONS = ["Auto", "Primitives Only", "Decimated Mesh Only", "Convex Hull"]
 
 
 class ExportOptions:
-    def __init__(self, output_dir: str = "", collision_strategy: str = "Auto", visual_quality_pct: float = 50.0):
+    def __init__(
+        self,
+        output_dir: str = "",
+        collision_strategy: str = "Auto",
+        visual_quality_pct: float = 50.0,
+        custom_description: str = "",
+        doc_url: str = "",
+        license: str = "",
+    ):
         self.output_dir = output_dir
         self.collision_strategy = collision_strategy
         self.visual_quality_pct = visual_quality_pct
+        self.custom_description = custom_description
+        self.doc_url = doc_url
+        self.license = license
 
 
 class ExportWorker(QtCore.QThread):
@@ -103,6 +126,36 @@ class ExportTaskPanel:
         self._protocol_combo.currentIndexChanged.connect(self._on_protocol_changed)
         self._protocol_config_widget.hide()
 
+        # Advanced Settings section
+        self._adv_toggle_btn = QtWidgets.QPushButton("▶ Advanced Settings")
+        self._adv_toggle_btn.setCheckable(True)
+        self._adv_toggle_btn.setChecked(False)
+        self._adv_toggle_btn.setStyleSheet("text-align: left; font-weight: bold;")
+        
+        self._adv_widget = QtWidgets.QWidget()
+        adv_layout = QtWidgets.QFormLayout(self._adv_widget)
+        adv_layout.setContentsMargins(5, 5, 5, 5)
+
+        self._license_input = QtWidgets.QLineEdit("")
+        self._license_input.setPlaceholderText("e.g. Apache 2.0")
+
+        self._doc_url_input = QtWidgets.QLineEdit("")
+        self._doc_url_input.setPlaceholderText("https://...")
+
+        self._desc_input = QtWidgets.QTextEdit("")
+        self._desc_input.setPlaceholderText("Custom description for PROTO header...")
+        self._desc_input.setMaximumHeight(70)
+
+        adv_layout.addRow("License:", self._license_input)
+        adv_layout.addRow("Documentation URL:", self._doc_url_input)
+        adv_layout.addRow("Custom Description:", self._desc_input)
+
+        self._adv_widget.hide()
+        self._adv_toggle_btn.clicked.connect(self._toggle_advanced_settings)
+
+        layout.addWidget(self._adv_toggle_btn)
+        layout.addWidget(self._adv_widget)
+
         # Warning label
         self._warning_label = QtWidgets.QLabel("")
         self._warning_label.setStyleSheet("color: red;")
@@ -145,6 +198,14 @@ class ExportTaskPanel:
 
     def _on_quality_changed(self, value: int) -> None:
         self._quality_label.setText(f"Visual Quality: {value}%")
+
+    def _toggle_advanced_settings(self, checked: bool) -> None:
+        if checked:
+            self._adv_toggle_btn.setText("▼ Advanced Settings")
+            self._adv_widget.show()
+        else:
+            self._adv_toggle_btn.setText("▶ Advanced Settings")
+            self._adv_widget.hide()
 
     def _on_protocol_changed(self, index: int) -> None:
         # Clear existing rows in QFormLayout
@@ -458,6 +519,19 @@ class ExportTaskPanel:
         root_choice = self._root_combo.currentText()
         override_root = None if root_choice.startswith("Auto") else root_choice
 
+        custom_desc = self._desc_input.toPlainText().strip()
+        doc_url = self._doc_url_input.text().strip()
+        license_str = self._license_input.text().strip()
+
+        self.options = ExportOptions(
+            output_dir=str(output_dir),
+            collision_strategy=strategy,
+            visual_quality_pct=float(quality_pct),
+            custom_description=custom_desc,
+            doc_url=doc_url,
+            license=license_str,
+        )
+
         exporter = WebotsExporter(
             output_dir=output_dir,
             world_name=world_name,
@@ -465,6 +539,9 @@ class ExportTaskPanel:
             visual_quality_pct=float(quality_pct),
             protocol_config=protocol_config,
             override_root=override_root,
+            custom_description=custom_desc,
+            doc_url=doc_url,
+            license=license_str,
         )
         try:
             doc = FreeCAD.ActiveDocument

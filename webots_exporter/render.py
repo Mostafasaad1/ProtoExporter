@@ -32,11 +32,25 @@ class WbtRenderer:
         solid_text = self._render_solid(root_solid)
         return template.render(world_name=world_name, root_solid=solid_text)
 
-    def render_proto(self, proto_name: str, root_solid: WbSolidNode) -> str:
+    def render_proto(
+        self,
+        proto_name: str,
+        root_solid: WbSolidNode,
+        description: str = "",
+        doc_url: str = "",
+        license: str = "",
+    ) -> str:
         template = self._env.get_template("proto.j2")
         node_type = "Robot" if self.has_joints(root_solid) else "Solid"
         solid_text = self._render_solid(root_solid, is_root=True)
-        return template.render(proto_name=proto_name, root_solid=solid_text, node_type=node_type)
+        return template.render(
+            proto_name=proto_name,
+            root_solid=solid_text,
+            node_type=node_type,
+            description=description,
+            doc_url=doc_url,
+            license=license,
+        )
 
     def _render_solid(self, node: WbSolidNode, is_root: bool = False) -> str:
         template = self._env.get_template("solid.proto.j2")

@@ -1,4 +1,19 @@
 #VRML_SIM R2025a utf8
+{% if license %}
+# license: {{ license }}
+{% endif %}
+{% if doc_url %}
+# documentation url: {{ doc_url }}
+{% endif %}
+{% if description %}
+{% for line in description.splitlines() %}
+{% if loop.first %}
+# description: {{ line }}
+{% else %}
+# {{ line }}
+{% endif %}
+{% endfor %}
+{% endif %}
 # template language: javascript
 PROTO {{ proto_name }} [
   field SFVec3f    translation 0 0 0
