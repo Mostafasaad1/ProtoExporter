@@ -87,6 +87,9 @@ class WbJointNode:
     max_stop_rot: float = 0.0
     min_stop_trans: float = 0.0
     max_stop_trans: float = 0.0
+    initial_position: float = 0.0
+    initial_position_rot: float = 0.0
+    initial_position_trans: float = 0.0
     child: Optional[WbSolidNode] = None
     actuated: bool = False
     sensed: bool = False

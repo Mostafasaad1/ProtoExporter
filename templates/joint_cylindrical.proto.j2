@@ -3,6 +3,7 @@ HingeJoint {
   jointParameters HingeJointParameters {
     anchor {{ m.vec3(joint.anchor) }}
     axis {{ m.vec3(joint.axis) }}
+    position {{ joint.initial_position_rot }}
     minStop {{ joint.min_stop_rot }}
     maxStop {{ joint.max_stop_rot }}
   }
@@ -33,6 +34,7 @@ HingeJoint {
       SliderJoint {
         jointParameters JointParameters {
           axis {{ m.vec3(joint.axis) }}
+          position {{ joint.initial_position_trans }}
           minStop {{ joint.min_stop_trans }}
           maxStop {{ joint.max_stop_trans }}
         }

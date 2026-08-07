@@ -48,6 +48,19 @@ class KinematicTreeBuilder:
                     min_stop = min_stop_trans
                     max_stop = max_stop_trans
 
+                def _clamp(v: float, mn: float, mx: float) -> float:
+                    if mn == 0.0 and mx == 0.0:
+                        return v
+                    if mn > mx:
+                        mn, mx = mx, mn
+                    if v < mn: return mn
+                    if v > mx: return mx
+                    return v
+
+                initial_position = _clamp(0.0, min_stop, max_stop)
+                initial_position_rot = _clamp(0.0, min_stop_rot, max_stop_rot)
+                initial_position_trans = _clamp(0.0, min_stop_trans, max_stop_trans)
+
                 actuated = props.get("actuated", False)
                 sensed = props.get("sensed", False)
 
@@ -63,6 +76,9 @@ class KinematicTreeBuilder:
                     max_stop_rot=max_stop_rot,
                     min_stop_trans=min_stop_trans,
                     max_stop_trans=max_stop_trans,
+                    initial_position=initial_position,
+                    initial_position_rot=initial_position_rot,
+                    initial_position_trans=initial_position_trans,
                     child=child_solid,
                     actuated=actuated,
                     sensed=sensed,
