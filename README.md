@@ -1,5 +1,7 @@
 # FreeCAD Webots Exporter Addon
 
+![ProtoExporter Showcase](Assests/bar_img.png)
+
 The FreeCAD Webots Exporter is a professional engineering integration tool designed to bridge the gap between computer-aided design (CAD) in FreeCAD 1.0+ and robot simulation in Webots. It automates the transition of native assembly models into fully-articulated, simulation-ready Webots PROTO nodes, preserving complex kinematics, physical properties, and high-fidelity materials.
 
 By automating kinematics extraction, mesh optimization, and communication interface generation, this tool eliminates manual rebuilding of CAD assemblies in simulation editors, reducing model setup times from days to minutes.
