@@ -31,6 +31,7 @@ class GUIProtocolWriter(BaseProtocolWriter):
                 "name": name,
                 "min": round(min_val, 4),
                 "max": round(max_val, 4),
+                "init": round(j.get("initial_position", 0.0), 4),
                 "unit": unit,
             })
 
@@ -65,7 +66,7 @@ for cfg in joint_configs:
     name = cfg["name"]
     min_val = cfg["min"]
     max_val = cfg["max"]
-    init_pos = max(min_val, min(max_val, 0.0))
+    init_pos = max(min_val, min(max_val, cfg.get("init", 0.0)))
     
     motor_dev = robot.getDevice(f"{{name}}_motor")
     if motor_dev is not None:
@@ -242,7 +243,7 @@ class JoggerApp:
             # Slider/Scale with parsed FreeCAD joint limits
             scale = tk.Scale(lf, from_=min_val, to=max_val, resolution=res, orient=tk.HORIZONTAL,
                              command=lambda val, j=joint: self.on_slider_move(j, val))
-            init_val = max(min_val, min(max_val, 0.0))
+            init_val = max(min_val, min(max_val, cfg.get("init", 0.0)))
             scale.set(init_val)
             scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
             

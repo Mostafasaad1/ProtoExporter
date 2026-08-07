@@ -11,6 +11,7 @@ def normalize_joint_info(j: Any) -> dict[str, Any]:
         return {
             "name": j,
             "joint_type": JointType.HINGE,
+            "initial_position": 0.0,
             "min_stop": 0.0,
             "max_stop": 0.0,
             "min_stop_rot": 0.0,
@@ -30,6 +31,7 @@ def normalize_joint_info(j: Any) -> dict[str, Any]:
         return {
             "name": j.get("name", ""),
             "joint_type": jt,
+            "initial_position": float(j.get("initial_position", j.get("initial_position_rot", j.get("initial_position_trans", 0.0)))),
             "min_stop": float(j.get("min_stop", 0.0)),
             "max_stop": float(j.get("max_stop", 0.0)),
             "min_stop_rot": float(j.get("min_stop_rot", 0.0)),
@@ -44,6 +46,7 @@ def normalize_joint_info(j: Any) -> dict[str, Any]:
         return {
             "name": getattr(j, "name", ""),
             "joint_type": jt,
+            "initial_position": float(getattr(j, "initial_position", getattr(j, "initial_position_rot", getattr(j, "initial_position_trans", 0.0)))),
             "min_stop": float(getattr(j, "min_stop", 0.0)),
             "max_stop": float(getattr(j, "max_stop", 0.0)),
             "min_stop_rot": float(getattr(j, "min_stop_rot", 0.0)),
@@ -56,6 +59,7 @@ def normalize_joint_info(j: Any) -> dict[str, Any]:
     return {
         "name": str(j),
         "joint_type": JointType.HINGE,
+        "initial_position": 0.0,
         "min_stop": 0.0,
         "max_stop": 0.0,
         "min_stop_rot": 0.0,
