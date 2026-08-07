@@ -1,16 +1,43 @@
-import os
+from typing import Any
 from pathlib import Path
-from webots_exporter.datamodel import ProtocolConfig
-from webots_exporter.protocols.base import BaseProtocolWriter
+from webots_exporter.datamodel import ProtocolConfig, JointType
+from webots_exporter.protocols.base import BaseProtocolWriter, normalize_joint_info
 
 class ROS2ProtocolWriter(BaseProtocolWriter):
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[Any], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         controller_dir = Path(export_dir) / "controllers" / f"{robot_name}_ctrl"
         controller_dir.mkdir(parents=True, exist_ok=True)
         
+        normalized_joints = [normalize_joint_info(j) for j in joints]
+        joint_names = [j["name"] for j in normalized_joints]
+        
+        joint_configs = []
+        for j in normalized_joints:
+            name = j["name"]
+            jtype = j["joint_type"]
+            min_stop = j["min_stop"]
+            max_stop = j["max_stop"]
+            is_slider = (jtype == JointType.SLIDER or jtype == "Slider")
+            
+            if min_stop == 0.0 and max_stop == 0.0:
+                min_val = -1.0 if is_slider else -3.14
+                max_val = 1.0 if is_slider else 3.14
+            else:
+                min_val = min_stop
+                max_val = max_stop
+                
+            urdf_type = "prismatic" if is_slider else "revolute"
+            joint_configs.append({
+                "name": name,
+                "min": round(min_val, 4),
+                "max": round(max_val, 4),
+                "urdf_type": urdf_type,
+            })
+
         # Write controller file
         controller_path = controller_dir / f"{robot_name}_ctrl.py"
-        joints_repr = repr(joints)
+        joints_repr = repr(joint_names)
+        joint_configs_repr = repr(joint_configs)
         peripherals = peripherals or []
         peripherals_repr = repr(peripherals)
         
@@ -192,14 +219,20 @@ def main():
     
     # Get devices
     joint_names = {joints_repr}
+    joint_configs = {joint_configs_repr}
     motors = {{}}
     sensors = {{}}
     
-    for name in joint_names:
+    for cfg in joint_configs:
+        name = cfg["name"]
+        min_val = cfg["min"]
+        max_val = cfg["max"]
+        init_pos = max(min_val, min(max_val, 0.0))
+        
         motor_dev = robot.getDevice(f"{{name}}_motor")
         if motor_dev is not None:
             motors[name] = motor_dev
-            motor_dev.setPosition(0.0)
+            motor_dev.setPosition(init_pos)
             
         sensor_dev = robot.getDevice(f"{{name}}_sensor")
         if sensor_dev is not None:
@@ -247,18 +280,23 @@ if __name__ == '__main__':
         ]
         
         parent_link = "base_link"
-        for idx, joint in enumerate(joints):
+        for idx, cfg in enumerate(joint_configs):
+            joint_name = cfg["name"]
+            joint_type = cfg["urdf_type"]
+            lower_val = cfg["min"]
+            upper_val = cfg["max"]
             child_link = f"link_{idx+1}"
             urdf_lines.append(f'  <link name="{child_link}"/>')
-            urdf_lines.append(f'  <joint name="{joint}" type="revolute">')
+            urdf_lines.append(f'  <joint name="{joint_name}" type="{joint_type}">')
             urdf_lines.append(f'    <parent link="{parent_link}"/>')
             urdf_lines.append(f'    <child link="{child_link}"/>')
-            urdf_lines.append('    <limit lower="-3.14" upper="3.14" effort="10" velocity="1"/>')
+            urdf_lines.append(f'    <limit lower="{lower_val}" upper="{upper_val}" effort="10" velocity="1"/>')
             urdf_lines.append('  </joint>')
             parent_link = child_link
             
         urdf_lines.append('</robot>')
         urdf_path.write_text("\n".join(urdf_lines), encoding="utf-8")
+
 
     def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
         return (

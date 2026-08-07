@@ -11,6 +11,8 @@ HingeJoint {
     RotationalMotor {
       name "{{ joint.name }}_rot_motor"
       maxTorque 10000
+      minPosition {{ joint.min_stop_rot }}
+      maxPosition {{ joint.max_stop_rot }}
     }
     {% endif %}
     {% if joint.sensed %}
@@ -39,6 +41,8 @@ HingeJoint {
           LinearMotor {
             name "{{ joint.name }}_trans_motor"
             maxForce 100000
+            minPosition {{ joint.min_stop_trans }}
+            maxPosition {{ joint.max_stop_trans }}
           }
           {% endif %}
           {% if joint.sensed %}

@@ -1,16 +1,28 @@
+from typing import Any
 import shutil
 from pathlib import Path
 from webots_exporter.datamodel import ProtocolConfig
-from webots_exporter.protocols.base import BaseProtocolWriter
+from webots_exporter.protocols.base import BaseProtocolWriter, normalize_joint_info
 
 class OPCUAProtocolWriter(BaseProtocolWriter):
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[Any], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         controller_dir = Path(export_dir) / "controllers" / f"{robot_name}_ctrl"
         controller_dir.mkdir(parents=True, exist_ok=True)
         
         server_url = config.opcua_server or "opc.tcp://127.0.0.1:4840"
         peripherals = peripherals or []
         peripherals_repr = repr(peripherals)
+        
+        normalized_joints = [normalize_joint_info(j) for j in joints]
+        joint_names = [j["name"] for j in normalized_joints]
+        joint_configs = [
+            {
+                "name": j["name"],
+                "min": round(j["min_stop"], 4),
+                "max": round(j["max_stop"], 4),
+            }
+            for j in normalized_joints
+        ]
         
         # Copy or generate CSV mapping file
         dest_csv_path = controller_dir / "mapping.csv"
@@ -19,13 +31,14 @@ class OPCUAProtocolWriter(BaseProtocolWriter):
             if src_path.exists() and src_path.is_file():
                 shutil.copy(src_path, dest_csv_path)
             else:
-                self._generate_default_csv(dest_csv_path, joints, peripherals)
+                self._generate_default_csv(dest_csv_path, joint_names, peripherals)
         else:
-            self._generate_default_csv(dest_csv_path, joints, peripherals)
+            self._generate_default_csv(dest_csv_path, joint_names, peripherals)
             
         # Write controller file
         controller_path = controller_dir / f"{robot_name}_ctrl.py"
-        joints_repr = repr(joints)
+        joints_repr = repr(joint_names)
+        joint_configs_repr = repr(joint_configs)
         
         controller_code = f"""import sys
 import os
@@ -52,14 +65,20 @@ timestep = int(robot.getBasicTimeStep())
 
 # Get devices
 joint_names = {joints_repr}
+joint_configs = {joint_configs_repr}
 motors = {{}}
 joint_sensors = {{}}
 
-for name in joint_names:
+for cfg in joint_configs:
+    name = cfg["name"]
+    min_val = cfg["min"]
+    max_val = cfg["max"]
+    init_pos = max(min_val, min(max_val, 0.0)) if (min_val != 0.0 or max_val != 0.0) else 0.0
+    
     motor_dev = robot.getDevice(f"{{name}}_motor")
     if motor_dev is not None:
         motors[name] = motor_dev
-        motor_dev.setPosition(0.0)
+        motor_dev.setPosition(init_pos)
     
     sensor_dev = robot.getDevice(f"{{name}}_sensor")
     if sensor_dev is not None:

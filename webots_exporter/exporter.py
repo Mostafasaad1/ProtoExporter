@@ -728,11 +728,11 @@ class WebotsExporter:
             diag.append(f"  Controller Protocol={proto.value}: generation failed: {e}")
             raise e
 
-    def _collect_all_joints(self, node: WbSolidNode) -> list[str]:
+    def _collect_all_joints(self, node: WbSolidNode) -> list[WbJointNode]:
         joints = []
         for joint in node.child_joints:
             if joint.name and (joint.actuated or joint.sensed):
-                joints.append(joint.name)
+                joints.append(joint)
             if joint.child:
                 joints.extend(self._collect_all_joints(joint.child))
         return joints

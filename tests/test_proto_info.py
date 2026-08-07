@@ -79,3 +79,32 @@ def test_collect_tree_stats_omits_zero_counts(tmp_path):
 
     desc = exporter._build_proto_description(root_solid)
     assert desc == ""
+
+
+def test_capture_preview_image_clears_and_restores_selection(tmp_path):
+    exporter = WebotsExporter(output_dir=tmp_path, world_name="robot_test")
+
+    mock_view = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.ActiveView = mock_view
+
+    mock_obj1 = MagicMock(name="Obj1")
+    mock_obj2 = MagicMock(name="Obj2")
+
+    mock_gui = MagicMock()
+    mock_gui.ActiveDocument = mock_doc
+    mock_gui.Selection.getSelection.return_value = [mock_obj1, mock_obj2]
+
+    with pytest.MonkeyPatch.context() as mp:
+        import sys
+        mp.setitem(sys.modules, "FreeCADGui", mock_gui)
+        exporter._capture_preview_image()
+
+    mock_gui.Selection.clearSelection.assert_called_once()
+    mock_view.saveImage.assert_called_once_with(
+        str(tmp_path / "icons" / "robot_test.png"), 128, 128, "Transparent"
+    )
+    assert mock_gui.Selection.addSelection.call_count == 2
+    mock_gui.Selection.addSelection.assert_any_call(mock_obj1)
+    mock_gui.Selection.addSelection.assert_any_call(mock_obj2)
+

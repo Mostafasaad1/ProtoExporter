@@ -1,16 +1,43 @@
-import os
+from typing import Any
 from pathlib import Path
-from webots_exporter.datamodel import ProtocolConfig
-from webots_exporter.protocols.base import BaseProtocolWriter
+from webots_exporter.datamodel import ProtocolConfig, JointType
+from webots_exporter.protocols.base import BaseProtocolWriter, normalize_joint_info
 
 class GUIProtocolWriter(BaseProtocolWriter):
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[Any], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         controller_dir = Path(export_dir) / "controllers" / f"{robot_name}_ctrl"
         controller_dir.mkdir(parents=True, exist_ok=True)
         
+        normalized_joints = [normalize_joint_info(j) for j in joints]
+        joint_names = [j["name"] for j in normalized_joints]
+        
+        joint_configs = []
+        for j in normalized_joints:
+            name = j["name"]
+            jtype = j["joint_type"]
+            min_stop = j["min_stop"]
+            max_stop = j["max_stop"]
+            is_slider = (jtype == JointType.SLIDER or jtype == "Slider")
+            
+            if min_stop == 0.0 and max_stop == 0.0:
+                min_val = -1.0 if is_slider else -3.14
+                max_val = 1.0 if is_slider else 3.14
+            else:
+                min_val = min_stop
+                max_val = max_stop
+                
+            unit = "m" if is_slider else "rad"
+            joint_configs.append({
+                "name": name,
+                "min": round(min_val, 4),
+                "max": round(max_val, 4),
+                "unit": unit,
+            })
+
         # Write controller file
         controller_path = controller_dir / f"{robot_name}_ctrl.py"
-        joints_repr = repr(joints)
+        joints_repr = repr(joint_names)
+        joint_configs_repr = repr(joint_configs)
         peripherals = peripherals or []
         peripherals_repr = repr(peripherals)
         
@@ -28,16 +55,22 @@ PORT = 5005
 robot = Robot()
 timestep = int(robot.getBasicTimeStep())
 
-# List of known joints
+# List of known joints and configs
 motor_names = {joints_repr}
+joint_configs = {joint_configs_repr}
 motors = {{}}
 sensors = {{}}
 
-for name in motor_names:
+for cfg in joint_configs:
+    name = cfg["name"]
+    min_val = cfg["min"]
+    max_val = cfg["max"]
+    init_pos = max(min_val, min(max_val, 0.0))
+    
     motor_dev = robot.getDevice(f"{{name}}_motor")
     if motor_dev is not None:
         motors[name] = motor_dev
-        motor_dev.setPosition(0.0)
+        motor_dev.setPosition(init_pos)
     
     sensor_dev = robot.getDevice(f"{{name}}_sensor")
     if sensor_dev is not None:
@@ -166,7 +199,7 @@ import time
 import sys
 
 PORT = 5005
-JOINTS = {joints_repr}
+JOINTS_CONFIG = {joint_configs_repr}
 PERIPHERALS = {peripherals_repr}
 
 class JoggerApp:
@@ -188,7 +221,13 @@ class JoggerApp:
         self.joints_lf.pack(fill=tk.BOTH, expand=True, pady=5)
 
         self.joint_widgets = {{}}
-        for joint in JOINTS:
+        for cfg in JOINTS_CONFIG:
+            joint = cfg["name"]
+            min_val = cfg["min"]
+            max_val = cfg["max"]
+            unit = cfg.get("unit", "rad")
+            res = 0.001 if unit == "m" else 0.01
+
             lf = tk.Frame(self.joints_lf)
             lf.pack(fill=tk.X, pady=5)
             
@@ -197,22 +236,25 @@ class JoggerApp:
             name_lbl.pack(side=tk.LEFT)
 
             # Telemetry display
-            val_lbl = tk.Label(lf, text="Current: 0.000 rad", width=18, anchor="w", font=("Courier", 10))
+            val_lbl = tk.Label(lf, text=f"Current: 0.000 {{unit}}", width=18, anchor="w", font=("Courier", 10))
             val_lbl.pack(side=tk.LEFT)
             
-            # Slider/Scale
-            scale = tk.Scale(lf, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL,
+            # Slider/Scale with parsed FreeCAD joint limits
+            scale = tk.Scale(lf, from_=min_val, to=max_val, resolution=res, orient=tk.HORIZONTAL,
                              command=lambda val, j=joint: self.on_slider_move(j, val))
+            init_val = max(min_val, min(max_val, 0.0))
+            scale.set(init_val)
             scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
             
             # Jog Buttons
-            dec_btn = tk.Button(lf, text="-", width=3, command=lambda j=joint, s=scale: self.jog(j, s, -0.1))
+            step = 0.01 if unit == "m" else 0.1
+            dec_btn = tk.Button(lf, text="-", width=3, command=lambda j=joint, s=scale, st=step: self.jog(j, s, -st))
             dec_btn.pack(side=tk.LEFT, padx=2)
             
-            inc_btn = tk.Button(lf, text="+", width=3, command=lambda j=joint, s=scale: self.jog(j, s, 0.1))
+            inc_btn = tk.Button(lf, text="+", width=3, command=lambda j=joint, s=scale, st=step: self.jog(j, s, st))
             inc_btn.pack(side=tk.LEFT, padx=2)
             
-            self.joint_widgets[joint] = {{"label": val_lbl, "scale": scale}}
+            self.joint_widgets[joint] = {{"label": val_lbl, "scale": scale, "unit": unit}}
             
         # Peripherals section
         self.peripheral_widgets = {{}}
@@ -284,7 +326,8 @@ class JoggerApp:
     def update_ui(self, telemetry):
         for name, val in telemetry.items():
             if name in self.joint_widgets:
-                self.joint_widgets[name]["label"].config(text=f"Current: {{float(val):.3f}} rad")
+                unit = self.joint_widgets[name].get("unit", "rad")
+                self.joint_widgets[name]["label"].config(text=f"Current: {{float(val):.3f}} {{unit}}")
             elif name in self.peripheral_widgets:
                 self.peripheral_widgets[name].config(text=str(val))
 
@@ -294,6 +337,7 @@ if __name__ == '__main__':
     root.mainloop()
 """
         gui_path.write_text(gui_code, encoding="utf-8")
+
 
     def get_dependency_notice(self, robot_name: str, controller_dir: str) -> str:
         return ""

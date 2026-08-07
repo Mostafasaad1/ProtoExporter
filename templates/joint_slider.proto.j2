@@ -10,6 +10,8 @@ SliderJoint {
     LinearMotor {
       name "{{ joint.name }}_motor"
       maxForce 100000
+      minPosition {{ joint.min_stop }}
+      maxPosition {{ joint.max_stop }}
     }
     {% endif %}
     {% if joint.sensed %}

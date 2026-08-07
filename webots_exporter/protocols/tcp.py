@@ -1,16 +1,28 @@
-import os
+from typing import Any
 from pathlib import Path
 from webots_exporter.datamodel import ProtocolConfig
-from webots_exporter.protocols.base import BaseProtocolWriter
+from webots_exporter.protocols.base import BaseProtocolWriter, normalize_joint_info
 
 class TCPProtocolWriter(BaseProtocolWriter):
-    def write(self, export_dir: str, robot_name: str, joints: list[str], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
+    def write(self, export_dir: str, robot_name: str, joints: list[Any], config: ProtocolConfig, peripherals: list[tuple[str, str]] = None) -> None:
         controller_dir = Path(export_dir) / "controllers" / f"{robot_name}_ctrl"
         controller_dir.mkdir(parents=True, exist_ok=True)
         
+        normalized_joints = [normalize_joint_info(j) for j in joints]
+        joint_names = [j["name"] for j in normalized_joints]
+        joint_configs = [
+            {
+                "name": j["name"],
+                "min": round(j["min_stop"], 4),
+                "max": round(j["max_stop"], 4),
+            }
+            for j in normalized_joints
+        ]
+        
         # Write controller file
         controller_path = controller_dir / f"{robot_name}_ctrl.py"
-        joints_repr = repr(joints)
+        joints_repr = repr(joint_names)
+        joint_configs_repr = repr(joint_configs)
         peripherals = peripherals or []
         peripherals_repr = repr(peripherals)
         
@@ -28,16 +40,23 @@ timestep = int(robot.getBasicTimeStep())
 
 # List of known joints
 motor_names = {joints_repr}
+joint_configs = {joint_configs_repr}
 motors = {{}}
 
-for name in motor_names:
+for cfg in joint_configs:
+    name = cfg["name"]
+    min_val = cfg["min"]
+    max_val = cfg["max"]
+    init_pos = max(min_val, min(max_val, 0.0)) if (min_val != 0.0 or max_val != 0.0) else 0.0
+    
     device_name = f"{{name}}_motor"
     dev = robot.getDevice(device_name)
     if dev is None:
         print(f"Warning: device {{device_name}} not found")
     else:
         motors[name] = dev
-        dev.setPosition(0.0)
+        dev.setPosition(init_pos)
+
 
 # Initialize joint sensors
 joint_sensors = {{}}
