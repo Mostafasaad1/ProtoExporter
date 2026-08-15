@@ -39,6 +39,8 @@ This guide will walk you through installation, basic usage, and provide a deep d
 2. In the FreeCAD Workbench drop-down menu (usually at the top), select **Webots Exporter**.
 3. Click the **Export to Webots** button on the toolbar to open the Exporter Task Panel.
 
+https://github.com/user-attachments/assets/f6b0dc60-91cf-4dbd-b89a-c01e08f89751
+
 > **Note:** The exporter will automatically detect your assembly. If multiple assemblies exist, ensure you have the desired one selected in the Tree View before launching the task panel.
 
 ---
@@ -91,6 +93,9 @@ Select a protocol from the **Controller Protocol** dropdown menu. Depending on y
 
 ### TCP Socket
 **Best for**: Custom lightweight integrations, remote AI training, and minimal-dependency workflows.
+
+https://github.com/user-attachments/assets/0ccaafbd-bec5-425b-9f61-f2e2cc21fb76
+
 - **How it works**: Generates a Python controller (`<robot>_ctrl.py`) that opens a TCP socket server. External programs can connect to this socket to send JSON commands (setting motor positions) and read JSON telemetry.
 - **Sensor Telemetry**: Telemetry packets streamed at `POLLING_RATE_MS` contain joint sensor states alongside serialized peripheral readings:
   - `GPS`: Serialized as a 3-element float array `[x, y, z]`.
@@ -101,6 +106,9 @@ Select a protocol from the **Controller Protocol** dropdown menu. Depending on y
 
 ### ROS 2
 **Best for**: Advanced robotics research, MoveIt! integration, and autonomous navigation.
+
+https://github.com/user-attachments/assets/784dbd23-2d8d-4cf9-8bbe-b35decb3a7dd
+
 - **How it works**: Generates a controller node that natively bridges Webots into the ROS 2 ecosystem. It automatically publishes the `robot_description` and `joint_states` telemetry. It listens to standard ROS 2 command topics to drive the simulation.
 - **Sensor Telemetry**: In addition to publishing `/robot_name/joint_states`, it declares specific publishers and publishes real-time sensor data over the following topics:
   - **Camera**: Published on `/robot_name/sensor_name/image` using `sensor_msgs/msg/Image` (raw `bgra8` format).
@@ -125,6 +133,9 @@ Select a protocol from the **Controller Protocol** dropdown menu. Depending on y
 
 ### OPC UA Client
 **Best for**: Enterprise SCADA systems, Industry 4.0 applications, and large-scale IoT networks.
+
+https://github.com/user-attachments/assets/5781dd5f-61a0-4b1f-96fc-ad4bbb260412
+
 - **How it works**: The Webots controller acts as an OPC UA Client that connects to an external OPC UA Server. It writes joint/sensor data to specific server nodes and reads command data from target nodes.
 - **Sensor Telemetry**: The generated `mapping.csv` defines both command inputs and telemetry mappings (for both joints and active peripheral sensors) to corresponding node IDs on the OPC UA server. Telemetry is written asynchronously at the polling rate.
 - **Configuration Fields**:
@@ -136,6 +147,9 @@ Select a protocol from the **Controller Protocol** dropdown menu. Depending on y
 
 ### Python GUI
 **Best for**: Quick prototyping, manual debugging, and kinematic testing without external code.
+
+https://github.com/user-attachments/assets/a3d65469-924f-4079-956c-a306f444912b
+
 - **How it works**: Generates a secondary Python script that opens a lightweight Tkinter window containing sliders for every actuated joint, and readouts for every sensed joint.
 - **Sensor Telemetry**: Renders a dedicated "Peripheral Sensors" panel at the bottom of the jogging dashboard showing real-time readouts (coordinates, orientations, or status strings) for all active peripherals.
 - **Generated Assets**: `<robot>_ctrl.py`, `gui_jogger.py`
