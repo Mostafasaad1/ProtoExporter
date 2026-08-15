@@ -253,14 +253,17 @@ class ExportTaskPanel:
         try:
             with open(file_path, mode='r', encoding='utf-8') as f:
                 reader = csv.reader(f)
-                for row_idx, row in enumerate(reader):
+                header = next(reader, None) # Skip header row
+                for row_idx, row in enumerate(reader, start=1):
                     if not row:
                         continue
                     if len(row) < 2:
                         warnings.append(f"Row {row_idx+1}: Invalid row format (must have at least 2 columns).")
                         continue
-                    node_path = row[0].strip()
-                    joint_name = row[1].strip()
+                        
+                    # opcua.py expects: joint_name, [type], node_id
+                    joint_name = row[0].strip()
+                    
                     if joint_name not in joint_labels:
                         warnings.append(f"Row {row_idx+1}: Joint '{joint_name}' not found in the assembly.")
         except Exception as e:

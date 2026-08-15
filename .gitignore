@@ -18,3 +18,4 @@ install/
 .pytest_cache/
 .opencode/
 Media/
+scratch/
